@@ -1,6 +1,9 @@
 from __future__ import annotations
 from types import NotImplementedType
 import sympy as sp
+from collections.abc import Iterable
+from numbers import Real
+from src.problab.distributions.base import Distribution
 
 
 
@@ -56,13 +59,9 @@ class RandomVariable:
             self.symbol = None
             self.expression = expression
 
-        if expression is None:
-            self.expression = self.symbol
-
     def __add__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=self.expression + other_expression)
 
     def __radd__(self, other: object) -> RandomVariable | NotImplementedType:
@@ -70,20 +69,17 @@ class RandomVariable:
 
     def __sub__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=self.expression - other_expression)
 
     def __rsub__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=other_expression - self.expression)
 
     def __mul__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=self.expression * other_expression)
 
     def __rmul__(self, other: object) -> RandomVariable | NotImplementedType:
@@ -91,58 +87,65 @@ class RandomVariable:
 
     def __truediv__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=self.expression / other_expression)
 
     def __rtruediv__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
+        if other_expression is NotImplemented: return NotImplemented
         return RandomVariable(expression=other_expression / self.expression)
 
     def __floordiv__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
-        return RandomVariable(expression=other_expression // self.expression)
+        if other_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=self.expression // other_expression)
 
     def __rfloordiv__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
-        return RandomVariable(expression=self.expression // other_expression)
+        if other_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=other_expression // self.expression)
 
     def __mod__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
-        return RandomVariable(expression=other_expression % self.expression)
+        if other_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=self.expression % other_expression)
 
     def __rmod__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
-        if other_expression is NotImplemented:
-            return NotImplemented
-        return RandomVariable(expression=self.expression % other_expression)
+        if other_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=other_expression % self.expression)
 
     def __pow__(self, exponent: object, modulo: object | None = None) -> RandomVariable | NotImplementedType:
-        # should we have checks that the exponent is in a set of supported types here?
-        return RandomVariable(expression=self.expression ** exponent)
+        if modulo is not None: return NotImplemented
+        exponent_expression = self._to_expression(exponent)
+        if exponent_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=self.expression ** exponent_expression)
 
     def __rpow__(self, base: object) -> RandomVariable | NotImplementedType:
-        ...
+        base_expression = self._to_expression(base)
+        if base_expression is NotImplemented: return NotImplemented
+        return RandomVariable(expression=base_expression ** self.expression)
 
     def __neg__(self) -> RandomVariable:
-        ...
+        return RandomVariable(expression=-self.expression)
 
     def __pos__(self) -> RandomVariable:
-        ...
+        return RandomVariable(expression=+self.expression)
 
     def __abs__(self) -> RandomVariable:
-        ...
+        return RandomVariable(expression=abs(self.expression))
 
     def __divmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        ...
+        other_expression = self._to_expression(other)
+        if other_expression is NotImplemented: return NotImplemented
+
+        quotient_expression, remainder_expression = divmod(self.expression, other_expression)
+
+        return (
+            RandomVariable(expression=quotient_expression),
+            RandomVariable(expression=remainder_expression),
+        )
+
 
     def __rdivmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
         ...
@@ -151,41 +154,85 @@ class RandomVariable:
         ...
 
 
-class Expression:
-    def __init__(self, expression: sp.Expr):
-        self.expression = expression
+class RandomVector:
+    def __init__(self, components: Iterable[RandomVariable | Real]):
+        for component in components:
+            if not isinstance(component, Real):
 
-    def __add__(self, other: Expression):
+        self.components = tuple(components)
 
-        symbol_mapping: dict[sp.Symbol, sp.Symbol] = {}
+    def __repr__(self) -> str:
+        ...
 
-        # rename overlapping symbols so they align name-wise
-        for symbol1, RV1 in self.dependencies.items():
-            for symbol2, RV2 in other.dependencies.items():
-                if (RV1 is RV2) and (symbol1 != symbol2):
-                    symbol_mapping[symbol2] = symbol1
+    def __len__(self) -> int:
+        ...
 
-        # rename symbols in other list tied to dependencies that are not present in self dependencies
-        new_symbol_idx = len(self.dependencies) + 1
-        for symbol, RV in other.dependencies.items():
-            if not any(RV is existing_rv for existing_rv in self.dependencies.values()):
-                new_symbol = sp.Symbol("x" + str(new_symbol_idx))
-                new_symbol_idx += 1
-                symbol_mapping[symbol] = new_symbol
+    def __iter__(self) -> Iterator[Real]:
+        ...
 
-        other_expression_aligned = other.expression.xreplace(symbol_mapping)
+    def __getitem__(self, index: int) -> Real:
+        ...
 
-        other_dependencies_aligned = {
-            symbol_mapping.get(old_symbol, old_symbol): RV
-            for old_symbol, RV in other.dependencies.items()
-        }
+    def __eq__(self, other: object) -> bool:
+        ...
 
+    def __hash__(self) -> int:
+        ...
 
-        combined_dependencies = (self.dependencies | other_dependencies_aligned)
+    def __add__(self, other: object) -> Vector | NotImplementedType:
+        ...
 
-        combined_expression: Expression = Expression(expression=self.expression + other_expression_aligned,
-                                                     dependencies=combined_dependencies)
+    def __radd__(self, other: object) -> Vector | NotImplementedType:
+        ...
 
-        return combined_expression
+    def __sub__(self, other: object) -> Vector | NotImplementedType:
+        ...
 
-def
+    def __rsub__(self, other: object) -> Vector | NotImplementedType:
+        ...
+
+    def __mul__(self, scalar: object) -> Vector | NotImplementedType:
+        ...
+
+    def __rmul__(self, scalar: object) -> Vector | NotImplementedType:
+        ...
+
+    def __truediv__(self, scalar: object) -> Vector | NotImplementedType:
+        ...
+
+    def __matmul__(self, other: object) -> Real | NotImplementedType:
+        ...
+
+    def __neg__(self) -> Vector:
+        ...
+
+    def __pos__(self) -> Vector:
+        ...
+
+    def __abs__(self) -> Real:
+        ...
+
+    def dot(self, other: Vector) -> Real:
+        ...
+
+    def cross(self, other: Vector) -> Vector:
+        ...
+
+    def norm(self) -> Real:
+        ...
+
+    def norm_squared(self) -> Real:
+        ...
+
+    def normalized(self) -> Vector:
+        ...
+
+    def distance_to(self, other: Vector) -> Real:
+        ...
+
+    def angle_to(self, other: Vector) -> Real:
+        ...
+
+    def project_onto(self, other: Vector) -> Vector:
+        ...
+
