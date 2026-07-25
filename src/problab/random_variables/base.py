@@ -1,15 +1,16 @@
 from __future__ import annotations
 from types import NotImplementedType
+from typing import Iterator
 import sympy as sp
-from collections.abc import Iterable
 from numbers import Real
-from src.problab.distributions.base import Distribution
-
+from src.problab.distributions.base import Distribution, DegenerateDistribution
+import numpy as np
 
 
 class RandomVariableSymbol(sp.Dummy):
-    def __new__(cls, rv: RandomVariable) -> RandomVariableSymbol:
-        symbol = super().__new__(cls)
+
+    def __new__(cls, rv: RandomVariable, name: str | None = None) -> RandomVariableSymbol:
+        symbol = super().__new__(cls, name)
         symbol.__random_variable = rv
         return symbol
 
@@ -18,6 +19,8 @@ class RandomVariableSymbol(sp.Dummy):
         return self.__random_variable
 
 class RandomVariable:
+
+    _count = 0
 
     @staticmethod
     def _to_expression(value: object) -> sp.Expr | NotImplementedType:
@@ -40,7 +43,11 @@ class RandomVariable:
 
         return expression
 
-    def __init__(self, distribution: Distribution = None, expression: sp.Expr = None):
+    def __init__(self, distribution: Distribution = None, expression: sp.Expr = None, name: str = None):
+
+        RandomVariable._count += 1
+        if name is None:
+            self.name = "RV_" + str(RandomVariable._count)
 
         if distribution is None and expression is None:
             raise ValueError("A distribution or expression must be provided.")
@@ -53,11 +60,17 @@ class RandomVariable:
         self.symbol: RandomVariableSymbol | None
 
         if distribution is not None:
-            self.symbol = RandomVariableSymbol(self)
+            self.symbol = RandomVariableSymbol(self, name=self.name)
             self.expression: sp.Expr = self.symbol
         else:
             self.symbol = None
             self.expression = expression
+
+    def __repr__(self) -> str:
+        return repr(self.expression)
+
+    def __str__(self) -> str:
+        return str(self.expression)
 
     def __add__(self, other: object) -> RandomVariable | NotImplementedType:
         other_expression = self._to_expression(other)
@@ -127,7 +140,7 @@ class RandomVariable:
         return RandomVariable(expression=base_expression ** self.expression)
 
     def __neg__(self) -> RandomVariable:
-        return RandomVariable(expression=-self.expression)
+        return RandomVariable(expression=sp.simplify(-self.expression))
 
     def __pos__(self) -> RandomVariable:
         return RandomVariable(expression=+self.expression)
@@ -153,86 +166,188 @@ class RandomVariable:
     def __round__(self, ndigits: int | None = None) -> RandomVariable:
         ...
 
+class RandomArray:
 
-class RandomVector:
-    def __init__(self, components: Iterable[RandomVariable | Real]):
-        for component in components:
-            if not isinstance(component, Real):
+    @staticmethod
+    def _to_array_operand(other: object,) -> np.ndarray | NotImplementedType:
+        if isinstance(other, RandomArray): return other.__array
+        if isinstance(other, np.ndarray): return other
+        return NotImplemented
 
-        self.components = tuple(components)
+    def __init__(self, components: object, *, copy: bool | None = None, ndmin: int = 0) -> None:
+
+        self.__array: np.ndarray
+
+        try:
+            self.__array = np.array(components, dtype=object, copy=copy, ndmin=ndmin)
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                "'components' must be convertible to a NumPy array"
+            ) from exc
+
+        for idx, component in np.ndenumerate(self.__array):
+            if isinstance(component, Real):
+                self.__array[idx] = RandomVariable(
+                    distribution=DegenerateDistribution(value=component)
+                )
+            elif isinstance(component, RandomVariable):
+                continue
+            else:
+                raise TypeError(
+                    f"Invalid element at index {idx}: "
+                    f"expected RandomVariable or Real, "
+                    f"got {type(component).__name__}"
+                )
+
+    __hash__ = None
 
     def __repr__(self) -> str:
-        ...
+        return "[" + ", ".join([repr(RV) for RV in self.__array]) + "]"
+
+    def __str__(self) -> str:
+        return "[" + ", ".join([str(RV) for RV in self.__array]) + "]"
 
     def __len__(self) -> int:
-        ...
+        return len(self.__array)
 
-    def __iter__(self) -> Iterator[Real]:
-        ...
+    def __iter__(self) -> Iterator[RandomVariable |np.ndarray]:
+        return iter(self.__array)
 
     def __getitem__(self, index: int) -> Real:
+        return self.__array[index]
+
+    def __eq__(self, other: object) -> bool | NotImplementedType:
+
+        if not isinstance(other, RandomArray):
+            return NotImplemented
+
+        if self.__array.shape != other.__array.shape:
+            return False
+
+        return all(
+            component1 == component2
+            for component1, component2 in zip(
+                self.__array.flat,
+                other.__array.flat,
+            )
+        )
+
+    def __add__(self, other: object) -> RandomArray | NotImplementedType:
+
+        other_array = self._to_array_operand(other)
+
+        if other_array is NotImplemented: return NotImplemented
+
+        if self.__array.shape != other_array.shape:
+            raise ValueError(
+                f"Incompatible shapes: "
+                f"{self.__array.shape} and {other_array.shape}"
+            )
+
+        return RandomArray(components=self.__array + other_array)
+
+    def __radd__(self, other: object) -> RandomArray | NotImplementedType:
+        return self.__add__(other)
+
+    def __sub__(self, other: object) -> RandomArray | NotImplementedType:
+
+        other_array = self._to_array_operand(other)
+
+        if other_array is NotImplemented: return NotImplemented
+
+        if self.__array.shape != other_array.shape:
+            raise ValueError(
+                f"Incompatible shapes: "
+                f"{self.__array.shape} and {other_array.shape}"
+            )
+
+        return RandomArray(components=self.__array - other_array)
+
+    def __rsub__(self, other: object) -> RandomArray | NotImplementedType:
+
+        other_array = self._to_array_operand(other)
+
+        if other_array is NotImplemented: return NotImplemented
+
+        if self.__array.shape != other_array.shape:
+            raise ValueError(
+                f"Incompatible shapes: "
+                f"{self.__array.shape} and {other_array.shape}"
+            )
+
+        return RandomArray(components=other_array - self.__array)
+
+    def __mul__(self, other: object) -> RandomArray | NotImplementedType:
+
+        other_array = self._to_array_operand(other)
+
+        if other_array is NotImplemented: return NotImplemented
+
+        if self.__array.shape != other_array.shape:
+            raise ValueError(
+                f"Incompatible shapes: "
+                f"{self.__array.shape} and {other_array.shape}"
+            )
+
+        return RandomArray(components=self.__array * other_array)
+
+    def __rmul__(self, other: object) -> RandomArray | NotImplementedType:
+        return self.__mul__(other)
+
+    # Implements division of every component by a scalar or compatible operand.
+    def __truediv__(self, scalar: object) -> RandomArray | NotImplementedType:
         ...
 
-    def __eq__(self, other: object) -> bool:
-        ...
-
-    def __hash__(self) -> int:
-        ...
-
-    def __add__(self, other: object) -> Vector | NotImplementedType:
-        ...
-
-    def __radd__(self, other: object) -> Vector | NotImplementedType:
-        ...
-
-    def __sub__(self, other: object) -> Vector | NotImplementedType:
-        ...
-
-    def __rsub__(self, other: object) -> Vector | NotImplementedType:
-        ...
-
-    def __mul__(self, scalar: object) -> Vector | NotImplementedType:
-        ...
-
-    def __rmul__(self, scalar: object) -> Vector | NotImplementedType:
-        ...
-
-    def __truediv__(self, scalar: object) -> Vector | NotImplementedType:
-        ...
-
+    # Implements the matrix-multiplication operator, typically as a dot product or matrix product.
     def __matmul__(self, other: object) -> Real | NotImplementedType:
         ...
 
-    def __neg__(self) -> Vector:
+    # Returns a new RandomArray with every component negated.
+    def __neg__(self) -> RandomArray:
         ...
 
-    def __pos__(self) -> Vector:
+    # Returns the RandomArray unchanged or as an equivalent positive copy.
+    def __pos__(self) -> RandomArray:
         ...
 
-    def __abs__(self) -> Real:
+    # Returns a new RandomArray containing the absolute value of every component.
+    def __abs__(self) -> RandomArray:
+        new_array = np.empty_like(self.__array, dtype=object)
+
+        for idx, component in np.ndenumerate(self.__array):
+            new_array[idx] = abs(component)
+
+        return RandomArray(components=new_array)
+
+    # Calculates the dot product between this array and another vector.
+    def dot(self, other: RandomArray) -> Real:
         ...
 
-    def dot(self, other: Vector) -> Real:
+    # Calculates the three-dimensional cross product between this array and another vector.
+    def cross(self, other: RandomArray) -> RandomArray:
         ...
 
-    def cross(self, other: Vector) -> Vector:
-        ...
-
+    # Calculates the Euclidean length of the vector.
     def norm(self) -> Real:
         ...
 
+    # Calculates the square of the Euclidean length without taking a square root.
     def norm_squared(self) -> Real:
         ...
 
-    def normalized(self) -> Vector:
+    # Returns a vector with the same direction and a norm of one.
+    def normalized(self) -> RandomArray:
         ...
 
-    def distance_to(self, other: Vector) -> Real:
+    # Calculates the Euclidean distance between this vector and another vector.
+    def distance_to(self, other: RandomArray) -> Real:
         ...
 
-    def angle_to(self, other: Vector) -> Real:
+    # Calculates the angle between this vector and another vector.
+    def angle_to(self, other: RandomArray) -> Real:
         ...
 
-    def project_onto(self, other: Vector) -> Vector:
+    # Returns the projection of this vector onto another vector.
+    def project_onto(self, other: RandomArray) -> RandomArray:
         ...
 
