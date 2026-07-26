@@ -5,7 +5,9 @@ import sympy as sp
 from numbers import Real
 from src.problab.distributions.base import Distribution, DegenerateDistribution
 import numpy as np
-
+from collections.abc import Callable
+from sympy.utilities.lambdify import implemented_function
+from itertools import count
 
 class RandomVariableSymbol(sp.Dummy):
 
@@ -20,7 +22,8 @@ class RandomVariableSymbol(sp.Dummy):
 
 class RandomVariable:
 
-    _count = 0
+    _count = count()
+    _applied_function_count = count()
 
     @staticmethod
     def _to_expression(value: object) -> sp.Expr | NotImplementedType:
@@ -45,9 +48,8 @@ class RandomVariable:
 
     def __init__(self, distribution: Distribution = None, expression: sp.Expr = None, name: str = None):
 
-        RandomVariable._count += 1
         if name is None:
-            self.name = "RV_" + str(RandomVariable._count)
+            self.name = "RV_" + str(next(RandomVariable._count))
 
         if distribution is None and expression is None:
             raise ValueError("A distribution or expression must be provided.")
@@ -161,10 +163,37 @@ class RandomVariable:
 
 
     def __rdivmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        ...
+        other_expression = self._to_expression(other)
+        if other_expression is NotImplemented: return NotImplemented
+
+        quotient_expression, remainder_expression = divmod(other_expression, self.expression)
+
+        return (
+            RandomVariable(expression=quotient_expression),
+            RandomVariable(expression=remainder_expression),
+        )
 
     def __round__(self, ndigits: int | None = None) -> RandomVariable:
         ...
+
+    def apply(self, function: Callable[[Real], Real], name: str = None) -> RandomVariable:
+        f = implemented_function(
+            sp.Function(f"f_{name if name is not None else next(self._applied_function_count)}"),
+            function
+        )
+
+        return RandomVariable(expression=f(self.expression))
+
+    def realize(self, n_samples: int | None = None) -> Real:
+        if self.distribution is None:
+            return self.distribution.sample(n_samples)
+        else:
+            realizations: dict[sp.Symbol, Real] = {}
+            for symbol in self.expression.free_symbols():
+                realizations[symbol] = symbol.random_variable.realize()
+            ...
+
+
 
 class RandomArray:
 
