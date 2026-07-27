@@ -185,11 +185,11 @@ class RandomVariable:
         return RandomVariable(expression=f(self.expression))
 
     def realize(self, n_samples: int | None = None) -> Real:
-        if self.distribution is None:
+        if isinstance(self.distribution, Distribution):
             return self.distribution.sample(n_samples)
         else:
-            realizations: dict[sp.Symbol, Real] = {}
-            for symbol in self.expression.free_symbols():
+            realizations: dict[RandomVariableSymbol, Real] = {}
+            for symbol in self.expression.free_symbols:
                 realizations[symbol] = symbol.random_variable.realize()
             ...
 
