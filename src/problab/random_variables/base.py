@@ -46,10 +46,10 @@ class RandomVariable:
 
         return expression
 
-    def __init__(self, distribution: Distribution = None, expression: sp.Expr = None, name: str = None):
-
-        if name is None:
-            self.name = "RV_" + str(next(RandomVariable._count))
+    def __init__(self,
+                 distribution: Distribution | None = None,
+                 expression: sp.Expr | None = None,
+                 name: str | None = None):
 
         if distribution is None and expression is None:
             raise ValueError("A distribution or expression must be provided.")
@@ -57,16 +57,38 @@ class RandomVariable:
         if distribution is not None and expression is not None:
             raise ValueError("Provide either a distribution or an expression, not both.")
 
-        self.distribution = distribution
+        self._distribution: Distribution | None = distribution
+        self._symbol: RandomVariableSymbol | None
+        self._expression: sp.Expr
+        self._name = (
+            f"RV_{next(RandomVariable._count)}"
+            if name is None
+            else name
+        )
 
-        self.symbol: RandomVariableSymbol | None
-
-        if distribution is not None:
-            self.symbol = RandomVariableSymbol(self, name=self.name)
-            self.expression: sp.Expr = self.symbol
+        if expression is None:
+            self._symbol = RandomVariableSymbol(self, name=self._name)
+            self._expression = self._symbol
         else:
-            self.symbol = None
-            self.expression = expression
+            self._symbol = None
+            self._expression = expression
+
+    @property
+    def distribution (self) -> Distribution | None:
+        return self._distribution
+
+    @property
+    def expression(self) -> sp.Expr:
+        return self._expression
+
+    @property
+    def symbol(self) -> RandomVariableSymbol | None:
+        return self._symbol
+
+    @property
+    def name(self) -> str:
+        return self._name
+
 
     def __repr__(self) -> str:
         return repr(self.expression)
@@ -191,8 +213,8 @@ class RandomVariable:
             realizations: dict[RandomVariableSymbol, Real] = {}
             for symbol in self.expression.free_symbols:
                 realizations[symbol] = symbol.random_variable.realize()
-            ...
 
+            return self.expression.subs(realizations)
 
 
 class RandomArray:
