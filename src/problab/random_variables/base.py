@@ -107,58 +107,58 @@ class RandomVariable(ABC):
         return str(self.expression)
 
     def __add__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression + other_expression)
 
     def __radd__(self, other: object) -> RandomVariable | NotImplementedType:
         return self.__add__(other)
 
     def __sub__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression - other_expression)
 
     def __rsub__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(other_expression - self.expression)
 
     def __mul__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression * other_expression)
 
     def __rmul__(self, other: object) -> RandomVariable | NotImplementedType:
         return self.__mul__(other)
 
     def __truediv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression / other_expression)
 
     def __rtruediv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(other_expression / self.expression)
 
     def __floordiv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression // other_expression)
 
     def __rfloordiv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(other_expression // self.expression)
 
     def __mod__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(self.expression % other_expression)
 
     def __rmod__(self, other: object) -> RandomVariable | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
         return self._from_expression(other_expression % self.expression)
 
     def __pow__(self, exponent: object, modulo: object | None = None) -> RandomVariable | NotImplementedType:
         if modulo is not None: return NotImplemented
-        if exponent_expression := self._to_expression(exponent) is NotImplemented: return NotImplemented
+        if (exponent_expression := self._to_expression(exponent)) is NotImplemented: return NotImplemented
         return _DerivedRandomVariable(expression=self.expression ** exponent_expression)
 
     def __rpow__(self, base: object) -> RandomVariable | NotImplementedType:
-        if base_expression := self._to_expression(base) is NotImplemented: return NotImplemented
+        if (base_expression := self._to_expression(base)) is NotImplemented: return NotImplemented
         return self._from_expression(base_expression ** self.expression)
 
     def __neg__(self) -> RandomVariable:
@@ -171,7 +171,7 @@ class RandomVariable(ABC):
         return self._from_expression(abs(self.expression))
 
     def __divmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
 
         quotient_expression, remainder_expression = divmod(self.expression, other_expression)
 
@@ -181,7 +181,7 @@ class RandomVariable(ABC):
         )
 
     def __rdivmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        if other_expression := self._to_expression(other) is NotImplemented: return NotImplemented
+        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
 
         quotient_expression, remainder_expression = divmod(other_expression, self.expression)
 
@@ -245,9 +245,24 @@ class _DerivedRandomVariable(RandomVariable):
         if not isinstance(expression, sp.Expr):
             raise TypeError("An expression must be provided.")
 
+        symbols: list[RandomVariableSymbol] = []
+
+        for symbol in sorted(expression.free_symbols, key=sp.default_sort_key):
+            if not isinstance(symbol, RandomVariableSymbol):
+                raise TypeError("The expression may only contain RandomVariableSymbol instances.")
+
+            symbols.append(symbol)
+
         super().__init__(name)
 
         self._expression = expression
+        self._symbols = symbols
+
+        self._evaluator = sp.lambdify(
+            self._symbols,
+            self._expression,
+
+        )
 
     @property
     def expression(self) -> sp.Expr:
@@ -255,17 +270,28 @@ class _DerivedRandomVariable(RandomVariable):
 
     def realize(self) -> Real:
 
-        realizations: dict[RandomVariableSymbol, Real] = {}
+        realizations = [symbol.random_variable.realize() for symbol in self._symbols]
 
-        for symbol in self.expression.free_symbols:
-            realizations[symbol] = symbol.random_variable.realize()
+        result = self._evaluator(*realizations)
 
-        return self.expression.subs(realizations)
+        if isinstance(result, np.generic): return result.item()
+
+        return result
 
     def sample(self, n_samples: int | None = None) -> np.ndarray:
-        if n_samples is None: return np.array([self.realize()])
-        return np.array([self.realize() for _ in range(n_samples)])
+        size = 1 if n_samples is None else n_samples
 
+        if size < 1:
+            raise ValueError("'n_samples' must be at least 1.")
+
+        values = [symbol.random_variable.sample() for symbol in self._symbols]
+
+        result = np.asarray(self._evaluator(*values))
+
+        if result.ndim == 0:
+            return np.full(size, result.item())
+
+        return result
 
 class RandomArray:
 
