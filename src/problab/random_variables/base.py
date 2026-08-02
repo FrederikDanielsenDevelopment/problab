@@ -28,7 +28,6 @@ class RandomVariableSymbol(sp.Dummy):
     def random_variable(self) -> _SourceRandomVariable:
         return self.__random_variable
 
-
 class RandomVariable(ABC):
 
     _count = count()
@@ -81,10 +80,6 @@ class RandomVariable(ABC):
         ...
 
     @abstractmethod
-    def realize(self) -> Real:
-        ...
-
-    @abstractmethod
     def sample(self, num_samples: int | None = None) -> np.ndarray:
         ...
 
@@ -92,13 +87,19 @@ class RandomVariable(ABC):
     def name(self) -> str:
         return self._name
 
+    def realize(self) -> Real:
+        return self.sample(1).item()
+
     def apply(self, function: Callable[[Real], Real], name: str = None) -> RandomVariable:
+
+        function_name = name if name is not None else f"f_{next(self._applied_function_count)}"
+
         f = implemented_function(
-            sp.Function(name if name is not None else f"f_{next(self._applied_function_count)}"),
-            function
+            sp.Function(function_name),
+            np.vectorize(function),
         )
 
-        return _DerivedRandomVariable(expression=f(self.expression))
+        return self._from_expression(f(self.expression))
 
     def __repr__(self) -> str:
         return repr(self.expression)
@@ -190,14 +191,14 @@ class RandomVariable(ABC):
             _DerivedRandomVariable(expression=remainder_expression),
         )
 
-    def __round__(self, n_digits: int | None = None) -> RandomVariable:
-        if n_digits is None:
+    def __round__(self, ndigits: int | None = None) -> RandomVariable:
+        if ndigits is None:
             digits = 0
         else:
             try:
-                digits = index(n_digits)
+                digits = index(ndigits)
             except TypeError:
-                raise TypeError("n_digits must be an integer or None.") from None
+                raise TypeError("num_digits must be an integer or None.") from None
 
         return self._from_expression(
             _ROUND_FUNCTION(
@@ -205,7 +206,6 @@ class RandomVariable(ABC):
                 digits,
             )
         )
-
 
 class _SourceRandomVariable(RandomVariable):
 
@@ -222,19 +222,22 @@ class _SourceRandomVariable(RandomVariable):
         self._symbol: RandomVariableSymbol = RandomVariableSymbol(self, name=self._name)
 
     @property
-    def distribution(self) -> Distribution:
-        return self._distribution
-
-    @property
     def expression(self) -> RandomVariableSymbol:
         return self._symbol
 
-    def realize(self) -> Real:
-        return self.distribution.sample()[0]
+    @property
+    def distribution(self) -> Distribution:
+        return self._distribution
 
-    def sample(self, n_samples: int | None = None) -> np.ndarray:
-        return self.distribution.sample(n_samples)
+    @distribution.setter
+    def distribution(self, distribution: Distribution) -> None:
+        if not isinstance(distribution, Distribution):
+            raise TypeError("'distribution' must be a Distribution instance")
 
+        self._distribution = distribution
+
+    def sample(self, num_samples: int | None = None) -> np.ndarray:
+        return self.distribution.sample(num_samples)
 
 class _DerivedRandomVariable(RandomVariable):
 
@@ -256,42 +259,44 @@ class _DerivedRandomVariable(RandomVariable):
         super().__init__(name)
 
         self._expression = expression
-        self._symbols = symbols
+        self._symbols = tuple(symbols)
 
         self._evaluator = sp.lambdify(
             self._symbols,
             self._expression,
-
+            modules="numpy",
         )
 
     @property
     def expression(self) -> sp.Expr:
         return self._expression
 
-    def realize(self) -> Real:
+    def sample(self, num_samples: int | None = None) -> np.ndarray:
+        size = 1 if num_samples is None else num_samples
+        if size < 1: raise ValueError("'num_samples' must be at least 1.")
 
-        realizations = [symbol.random_variable.realize() for symbol in self._symbols]
+        realizations = [symbol.random_variable.sample(size) for symbol in self._symbols]
 
-        result = self._evaluator(*realizations)
-
-        if isinstance(result, np.generic): return result.item()
-
-        return result
-
-    def sample(self, n_samples: int | None = None) -> np.ndarray:
-        size = 1 if n_samples is None else n_samples
-
-        if size < 1:
-            raise ValueError("'n_samples' must be at least 1.")
-
-        values = [symbol.random_variable.sample() for symbol in self._symbols]
-
-        result = np.asarray(self._evaluator(*values))
+        result = np.asarray(self._evaluator(*realizations))
 
         if result.ndim == 0:
             return np.full(size, result.item())
 
         return result
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class RandomArray:
 
