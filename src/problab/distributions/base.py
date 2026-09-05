@@ -1,20 +1,261 @@
 from abc import ABC, abstractmethod
+from typing import TypeVar
 import numpy as np
+from enum import Enum
+from collections.abc import Callable
 from numbers import Real
-from numpy.random import normal
+
+from scipy.stats import binom
+
+from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
+from src.problab.probability.intervals import ConfidenceInterval
+from src.problab.random_variables.context import RealizationContext
+from src.problab.statistics.quantiles import quantile_confidence_interval, QuantileMethod
+from src.problab.value_sets import ValueSet
+
+T = TypeVar('T')
+
+
+class Mode(Enum):
+    AUTO = 1
+    EXACT = 2
+    MONTE_CARLO = 3
+
 
 class Distribution(ABC):
 
+    @property
     @abstractmethod
-    def sample(self, size: int | tuple[int, ...] | None = None, *, rng: np.random.Generator | None = None) -> Real | np.ndarray:
-        pass
+    def value_set(self) -> ValueSet:
+        ...
+
+    @abstractmethod
+    def sample(self, context: RealizationContext | None = None) -> np.ndarray:
+        ...
+
+    def quantile_confidence_interval(self,
+                                     q: float,
+                                     alpha: float = DEF_ALPHA,
+                                     num_samples: int = DEF_NUM_SAMPLES,
+                                     rng: np.random.Generator | None = None
+                                     ) -> ConfidenceInterval:
+
+        samples = self.sample(
+            RealizationContext(
+                num_samples=num_samples,
+                rng=rng,
+            )
+        )
+
+        return quantile_confidence_interval(
+            samples=samples,
+            q=q,
+            alpha=alpha,
+        )
 
 
-class DegenerateDistribution(Distribution):
+    def _monte_carlo(self,
+                     operation: Callable[[np.ndarray], Real | np.ndarray],
+                     num_samples: int = DEF_NUM_SAMPLES,
+                     rng: np.random.Generator | None = None
+                     ) -> float | np.ndarray:
 
-    def __init__(self, value: Real):
-        self.value = value
+        samples = self.sample(
+            RealizationContext(
+                num_samples=num_samples,
+                rng=rng,
+            )
+        )
 
-    def sample(self, size: int | tuple[int, ...] | None = None, *, rng: np.random.Generator | None = None) -> Real | np.ndarray:
-        return np.full(size, self.value)
+        result = operation(samples)
+
+        return float(result) if np.ndim(result) == 0 else result
+
+
+    def mean(self,
+             mode: Mode = Mode.AUTO,
+             num_samples: int = DEF_NUM_SAMPLES,
+             rng: np.random.Generator | None = None
+             ) -> float:
+
+        if mode == Mode.MONTE_CARLO:
+            return self._monte_carlo(operation=np.mean, num_samples=num_samples, rng=rng)
+
+        exact_mean = self._mean_exact()
+
+        if mode == Mode.EXACT:
+            if exact_mean is None:
+                raise NotImplementedError("Exact mean is not available for this distribution.")
+            return exact_mean
+
+        if mode == Mode.AUTO:
+            if exact_mean is not None:
+                return exact_mean
+
+            return self._monte_carlo(operation=np.mean, num_samples=num_samples, rng=rng)
+
+        raise ValueError(f"Unknown mode: {mode!r}")
+
+    def variance(self,
+                 mode: Mode = Mode.AUTO,
+                 num_samples: int = DEF_NUM_SAMPLES,
+                 rng: np.random.Generator | None = None
+                 ) -> float:
+
+
+        if mode == Mode.MONTE_CARLO:
+            return self._monte_carlo(operation=np.var, num_samples=num_samples, rng=rng)
+
+        exact_variance = self._variance_exact()
+
+        if mode == Mode.EXACT:
+            if exact_variance is None:
+                raise NotImplementedError("Exact variance is not available for this distribution.")
+            return exact_variance
+
+        if mode == Mode.AUTO:
+            if exact_variance is not None:
+                return exact_variance
+
+            return self._monte_carlo(operation=np.var, num_samples=num_samples, rng=rng)
+
+        raise ValueError(f"Unknown mode: {mode!r}")
+
+    def std(self,
+            mode: Mode = Mode.AUTO,
+            num_samples: int = DEF_NUM_SAMPLES,
+            rng: np.random.Generator | None = None
+            ) -> float:
+
+        if mode == Mode.MONTE_CARLO:
+            return self._monte_carlo(operation=np.std, num_samples=num_samples, rng=rng)
+
+        exact_std = np.sqrt(self._variance_exact())
+
+        if mode == Mode.EXACT:
+            if exact_std is None:
+                raise NotImplementedError("Exact standard deviation is not available for this distribution.")
+            return exact_std
+
+        if mode == Mode.AUTO:
+            if exact_std is not None:
+                return exact_std
+
+            return self._monte_carlo(operation=np.std, num_samples=num_samples, rng=rng)
+
+        raise ValueError(f"Unknown mode: {mode!r}")
+
+    def cdf(self,
+            x: Real | np.ndarray,
+            mode: Mode = Mode.AUTO,
+            num_samples: int = DEF_NUM_SAMPLES,
+            rng: np.random.Generator | None = None
+            ) -> float | np.ndarray:
+
+        def monte_carlo() -> float | np.ndarray:
+
+            operation = (
+                lambda samples: (
+                        np.searchsorted(
+                            np.sort(samples),
+                            x,
+                            side="right",
+                        ) / len(samples)
+                )
+                if isinstance(x, np.ndarray)
+                else lambda samples: np.mean(samples <= x)
+            )
+
+            return self._monte_carlo(
+                operation=operation,
+                num_samples=num_samples,
+                rng=rng,
+            )
+
+        if mode == Mode.MONTE_CARLO:
+            return monte_carlo()
+
+        exact_cdf = self._cdf_exact(x)
+
+        if mode == Mode.EXACT:
+            if exact_cdf is None:
+                raise NotImplementedError(
+                    "Exact CDF is not available for this distribution."
+                )
+            return exact_cdf
+
+        if mode == Mode.AUTO:
+            return exact_cdf if exact_cdf is not None else monte_carlo()
+
+        raise ValueError(f"Unknown mode: {mode!r}")
+
+    def ppf(self,
+            q: Real | np.ndarray,
+            mode: Mode = Mode.AUTO,
+            num_samples: int = DEF_NUM_SAMPLES,
+            rng: np.random.Generator | None = None,
+            quantile_method: QuantileMethod = "inverted_cdf"
+            ) -> float | np.ndarray:
+
+        q_array = np.asarray(q)
+
+        if np.any(np.isnan(q_array)) or np.any((q_array < 0) | (q_array > 1)):
+            raise ValueError("'q' must be between 0 and 1.")
+
+        def monte_carlo() -> float | np.ndarray:
+            return self._monte_carlo(
+                operation=lambda samples: np.quantile(
+                    samples,
+                    q,
+                    method=quantile_method,
+                ),
+                num_samples=num_samples,
+                rng=rng,
+            )
+
+        if mode == Mode.MONTE_CARLO:
+            return monte_carlo()
+
+        if mode not in (Mode.EXACT, Mode.AUTO):
+            raise ValueError(f"Unknown mode: {mode!r}")
+
+        exact_ppf = self._ppf_exact(q)
+
+        if mode == Mode.EXACT:
+            if exact_ppf is None:
+                raise NotImplementedError("Exact PPF is not available for this distribution.")
+            return exact_ppf
+
+        return exact_ppf if exact_ppf is not None else monte_carlo()
+
+    def _mean_exact(self) -> float:
+        raise NotImplementedError
+
+    def _variance_exact(self) -> float:
+        raise NotImplementedError
+
+    def _cdf_exact(self,
+                   x: Real | np.ndarray
+                   ) -> float | np.ndarray:
+        raise NotImplementedError
+
+    def _ppf_exact(self,
+                   q: Real | np.ndarray
+                   ) -> float | np.ndarray:
+        raise NotImplementedError
+
+
+class ContinuousDistribution(Distribution):
+
+
+    @abstractmethod
+    def pdf(self, x: Real | np.ndarray) -> float | np.ndarray:
+        ...
+
+
+class DiscreteDistribution(Distribution):
+
+    @abstractmethod
+    def pmf(self, x: Real | np.ndarray) -> float | np.ndarray:
+        ...
 

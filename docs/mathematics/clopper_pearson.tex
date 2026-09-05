@@ -1,0 +1,255 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\providecommand*{\lemmaautorefname}{Lemma}
+
+\newtheorem{corollary}[lemma]{Corollary}
+\providecommand*{\corollaryautorefname}{Corollary}
+
+\renewcommand{\refname}{\raggedright References}
+
+\begin{document}
+
+\begin{center}
+\section*{Derivation of the Clopper-Pearson confidence interval and proof of its coverage}
+{\small Frederik Danielsen}
+\end{center}
+
+\vspace{1em}
+
+\noindent This note provides a mathematical derivation of the Clopper-Pearson confidence interval, introduced by C. J. Clopper and E. S. Pearson \cite{clopper1934}, and proof of its coverage level. The results presented here are classical and are not original to this note. They are derived independently to ensure a thorough understanding of the underlying mathematics, to present the arguments in a form suited to this project, and to obtain conclusions that are directly useful for the implementation in Problab\footnote{\url{https://github.com/FrederikDanielsenDevelopment/problab}}. The derivation assumes $K_p\sim Bin(n,p)$ and a significance level $\alpha\in(0,1)$, corresponding to a target coverage level of $1-\alpha$. In \autoref{lemma:Lower_Clopper-Pearson_endpoint} and \autoref{lemma:Upper_Clopper-Pearson_endpoint} the lower and upper Clopper-Pearson endpoints, $p_L(k)$ and $p_U(k)$, are derived. In \autoref{lemma:lower-endpoint-probability-inequality} and \autoref{lemma:upper-endpoint-probability-inequality}, it is proven that $P(p<p_L(K_p))<\alpha/2$ and $P(p>p_U(K_p))<\alpha/2$. Lastly, in \autoref{lemma:clopper-pearson-interval} it is shown that 
+$$P(p_L(K_p)\leq p \leq p_U(K_p)) \geq 1 - \alpha.$$
+
+Practically, these results enable Problab to attach a $1-\alpha$ confidence interval to probabilities estimated from samples, providing a measure of the uncertainty associated with probability estimates involving random variables.
+\vspace{0.5em}
+\begin{lemma}\label{lemma:Lower_Clopper-Pearson_endpoint}
+Let $n\in\mathbb{Z}_{>0}$, $\alpha\in(0,1)$, $p\in[0,1]$, and $K_p\sim Bin(n,p)$. For $k\in\{1,\ldots,n\}$,
+$$P(K_p\geq k)=F_{Beta(k,n-k+1)}(p).$$
+Therefore,
+$$P(K_p\geq k)=\alpha/2$$
+if and only if
+$$p=F_{Beta(k,n-k+1)}^{-1}(\alpha/2).$$
+\end{lemma}
+\begin{proof}
+It is commonly known, that
+$$P(K_p\geq k)=\sum_{j=k}^n\binom{n}{j}p^j(1-p)^{n-j}.$$
+If you will indulge me for a moment, consider what happens when differentiate this expression with respect to $p\in(0,1)$:
+$$\frac{d}{dp}\sum_{j=k}^n\binom{n}{j}p^j(1-p)^{n-j}=\sum_{j=k}^n\binom{n}{j}\frac{d}{dp}\left(p^j(1-p)^{n-j}\right)$$
+$$=\sum_{j=k}^n\binom{n}{j}\left(jp^{j-1}(1-p)^{n-j}-p^j(n-j) (1-p)^{n-j-1}\right)$$
+$$=\sum_{j=k}^n\binom{n}{j}jp^{j-1}(1-p)^{n-j}-\sum_{j=k}^n\binom{n}{j}p^j(n-j) (1-p)^{n-j-1}$$
+Using the identities
+$$j\binom{n}{j}=n\binom{n-1}{j-1}$$
+and
+$$(n-j)\binom{n}{j}=n\binom{n-1}{j},$$
+together with the standard conventions
+$$\binom{m}{r}=0\;\forall\,r>m$$
+and
+$$\sum_{j=a}^{b}x_j=0\quad\text{if }a>b,$$
+we get
+$$\sum_{j=k}^n\binom{n}{j}jp^{j-1}(1-p)^{n-j}-\sum_{j=k}^n\binom{n}{j}p^j(n-j) (1-p)^{n-j-1}$$
+$$=\sum_{j=k}^nn\binom{n-1}{j-1}p^{j-1}(1-p)^{n-j}-\sum_{j=k}^np^jn\binom{n-1}{j} (1-p)^{n-j-1}$$
+$$=\sum_{j=k-1}^{n-1}n\binom{n-1}{j}p^{j}(1-p)^{n-j-1}-\left(\sum_{j=k}^{n-1}p^jn\binom{n-1}{j} (1-p)^{n-j-1}+p^nn\binom{n-1}{n}(1-p)^{-1}\right)$$
+$$=\sum_{j=k-1}^{n-1}n\binom{n-1}{j}p^{j}(1-p)^{n-j-1}-\sum_{j=k}^{n-1}p^jn\binom{n-1}{j} (1-p)^{n-j-1}$$
+$$=n\binom{n-1}{k-1}p^{k-1}(1-p)^{n-k}+\sum _{j=k}^{n-1}n\binom{n-1}{j}p^{j}(1-p)^{n-j-1}-\sum_{j=k}^{n-1}p^jn\binom{n-1}{j} (1-p)^{n-j-1}$$
+$$=n\binom{n-1}{k-1}p^{k-1}(1-p)^{n-k}$$
+$$=\frac{n!}{(k-1)!(n-k)!}p^{k-1}(1-p)^{n-k}$$
+The Beta probability density function is given by
+$$f_{Beta(a,b)}(x)=\frac{x^{a-1}(1-x)^{b -1}}{B(a,b)},$$
+where 
+$$B(a,b)=\frac{\Gamma(a)\Gamma(b)}{\Gamma(a+b)}$$
+and $\Gamma$ denotes the Gamma function. For any positive integer $n$ it  holds that $\Gamma(n)=(n-1)!$. Notice that if $a=k$ and $b=n-k+1$ then
+$$\begin{aligned}
+    f_{Beta(k,n-k+1)}(p)&=\frac{p^{k-1}(1-p)^{n-k}}{B(k,n-k+1)}=\frac{\Gamma(n+1)p^{k-1}(1-p)^{n-k}}{\Gamma(k)\Gamma(n-k+1)}\\
+    &=\frac{n!}{(k-1)!(n-k)!}p^{k-1}(1-p)^{n-k}=\frac{d}{dp}P(K_p\geq k)
+\end{aligned}$$
+Hence,
+$$P(K_p\geq k)-P(K_0\geq k)=\int_0^p\frac{d}{dt}P(K_t\geq k)dt=\int_0^p f_{Beta(k,n-k+1)}(t)dt.$$
+When $p=0$ the binomial random variable $K$ is equal to $0$ with probability $1$. Therefore, for $k\in\{1,\ldots,n\}$, the event $K\geq k$ is impossible and hence $P(K_0\geq k)=0$. Thus
+$$P(K_p\geq k)=\int_0^p f_{Beta(k,n-k+1)}(t)dt=F_{Beta(k,n-k+1)}(p).$$
+Note that this equality also holds at $p=0$ and $p=1$ by continuity.
+Since $F_{Beta(k,n-k+1)}$ is strictly increasing, imposing the constraint $P(K_p\geq k)=\alpha/2$ gives
+$$P(K_p\geq k)=\alpha/2
+\Leftrightarrow
+p = F_{Beta(k,n-k+1)}^{-1}(\alpha/2).$$
+\end{proof}
+
+
+\begin{lemma}\label{lemma:Upper_Clopper-Pearson_endpoint}
+Let $n\in\mathbb{Z}_{>0}$, $\alpha\in(0,1)$, $p\in[0,1]$, and $K_p\sim Bin(n,p)$. For $k\in\{0,\ldots,n-1\}$,
+$$P(K_p\leq k)=1-F_{Beta(k+1,n-k)}(p).$$
+Therefore,
+$$P(K_p\leq k)=\alpha/2$$
+if and only if
+$$p=F_{Beta(k+1,n-k)}^{-1}(1-\alpha/2).$$
+\end{lemma}
+\begin{proof}
+It is commonly known, that
+$$P(K_p\leq k)=\sum_{j=0}^k\binom{n}{j}p^j(1-p)^{n-j}.$$
+If you will indulge me for a moment, consider what happens when differentiate this expression with respect to $p\in(0,1)$:
+$$\frac{d}{dp}\sum_{j=0}^k\binom{n}{j}p^j(1-p)^{n-j}=\sum_{j=0}^k\binom{n}{j}\frac{d}{dp}\left(p^j(1-p)^{n-j}\right)$$
+$$=\sum_{j=0}^k\binom{n}{j}\left(jp^{j-1}(1-p)^{n-j}-p^j(n-j)(1-p)^{n-j-1}\right)$$
+$$=\sum_{j=0}^k\binom{n}{j}jp^{j-1}(1-p)^{n-j}-\sum_{j=0}^k\binom{n}{j}p^j(n-j)(1-p)^{n-j-1}$$
+Using the identities
+$$j\binom{n}{j}=n\binom{n-1}{j-1}$$
+and
+$$(n-j)\binom{n}{j}=n\binom{n-1}{j},$$
+together with the standard conventions
+$$\binom{m}{r}=0\;\forall\,r>m$$
+and
+$$\sum_{j=a}^{b}x_j=0\quad\text{if }a>b,$$
+we get
+$$\sum_{j=0}^k\binom{n}{j}jp^{j-1}(1-p)^{n-j}-\sum_{j=0}^k\binom{n}{j}p^j(n-j)(1-p)^{n-j-1}$$
+$$=\sum_{j=1}^kn\binom{n-1}{j-1}p^{j-1}(1-p)^{n-j}-\sum_{j=0}^kp^jn\binom{n-1}{j}(1-p)^{n-j-1}$$
+$$=\sum_{j=0}^{k-1}n\binom{n-1}{j}p^j(1-p)^{n-j-1}-\sum_{j=0}^kp^jn\binom{n-1}{j}(1-p)^{n-j-1}$$
+$$=\sum_{j=0}^{k-1}n\binom{n-1}{j}p^j(1-p)^{n-j-1}-\left(\sum_{j=0}^{k-1}p^jn\binom{n-1}{j}(1-p)^{n-j-1}+p^kn\binom{n-1}{k}(1-p)^{n-k-1}\right)$$
+$$=-n\binom{n-1}{k}p^k(1-p)^{n-k-1}$$
+$$=-\frac{n!}{k!(n-k-1)!}p^k(1-p)^{n-k-1}$$
+The Beta probability density function is given by
+$$f_{Beta(a,b)}(x)=\frac{x^{a-1}(1-x)^{b-1}}{B(a,b)},$$
+where
+$$B(a,b)=\frac{\Gamma(a)\Gamma(b)}{\Gamma(a+b)}$$
+and $\Gamma$ denotes the Gamma function. For any positive integer $n$ it holds that $\Gamma(n)=(n-1)!$. Notice that if $a=k+1$ and $b=n-k$ then
+$$\begin{aligned}
+    f_{Beta(k+1,n-k)}(p)&=\frac{p^k(1-p)^{n-k-1}}{B(k+1,n-k)}=\frac{\Gamma(n+1)p^k(1-p)^{n-k-1}}{\Gamma(k+1)\Gamma(n-k)}\\
+    &=\frac{n!}{k!(n-k-1)!}p^k(1-p)^{n-k-1}=-\frac{d}{dp}P(K_p\leq k)
+\end{aligned}$$
+Hence,
+$$P(K_p\leq k)-P(K_0\leq k)=\int_0^p\frac{d}{dt}P(K_t\leq k)dt=-\int_0^p f_{Beta(k+1,n-k)}(t)dt.$$
+When $p=0$ the binomial random variable $K$ is equal to $0$ with probability $1$. Therefore, for $k\in\{0,\ldots,n-1\}$, the event $K\leq k$ occurs with probability $1$ and hence $P(K_0\leq k)=1$. Thus
+$$P(K_p\leq k)=1-\int_0^p f_{Beta(k+1,n-k)}(t)dt=1-F_{Beta(k+1,n-k)}(p).$$
+Note that this equality also holds at $p=0$ and $p=1$ by continuity.
+Since $F_{Beta(k+1,n-k)}$ is strictly increasing, imposing the constraint $P(K_p\leq k)=\alpha/2$ gives
+$$P(K_p\leq k)=
+1-F_{Beta(k+1,n-k)}(p)=\alpha/2
+\Leftrightarrow
+p=F_{Beta(k+1,n-k)}^{-1}(1-\alpha/2).$$
+\end{proof}
+
+
+
+\begin{lemma}\label{lemma:lower-endpoint-probability-inequality}
+Let $n\in\mathbb{Z}_{>0}$, $\alpha\in(0,1)$, $p\in[0,1]$, $K_p\sim Bin(n,p)$, and 
+$$p_L(k):= \begin{cases}
+    0, &k=0,\\
+    F^{-1}_{Beta(k,n-k+1)}(\alpha/2), &k\in\{1,\ldots,n\}.
+\end{cases}$$
+Then
+$$P(p_L(K_p)>p)<\alpha/2.$$
+\end{lemma}
+\begin{proof}
+As stated in \autoref{lemma:Lower_Clopper-Pearson_endpoint}, for $k\in\{1,\ldots,n\}$, 
+$$P(K_p\geq k)=\alpha/2 \Leftrightarrow p=p_L(k).$$
+Furthermore, increasing the probability of success, $p$, increases the likelihood of seeing $k$ or more successes. In other words, $P(K_p \geq k)$ is strictly increasing in $p$.
+This implies that 
+$$p<p_L(k) \Leftrightarrow P(K_p \geq k)<\alpha/2.$$
+In the case that $(n,p)$ is so that $P(K_p\geq k) \nless \alpha/2$ for all $k\in\{1,\ldots,n\}$, then necessarily $p\geq p_L(k)$ for all said $k$.
+Furthermore, since by definition $p_L(0)=0 \leq p$ for all $p\in [0,1]$ this would mean that
+$$p\geq p_L(k),\;\forall \,k\in \{0,\ldots, n\}.$$
+Consequently, in this case, we have
+$$P(p_L(K_p)>p)=0<\alpha/2.$$
+Otherwise, inevitably $\exists\, k^*\in\{1,\ldots,n\}$ such that
+$$k^*=\min\{k\in\{1,\ldots,n\}:\,P(K_p\geq k)<\alpha/2\}.$$
+Since $P(K_p\geq k)$ decreases in $k$, for any $k\geq k^*$ the inequality $P(K_p \geq k)<\alpha /2$ holds. By the definition of $k^*$, it does not hold for any $k<k^*$. Therefore
+$$P(K_p \geq k) <\alpha /2 \Leftrightarrow k\geq k^*,\quad \forall\,k\in\{1,\ldots,n\}$$
+so, for $k\in\{1,\ldots,n\}$,
+$$p<p_L(k)\Leftrightarrow k\geq k^*.$$
+Note that since $p_L(0)=0\leq p$,
+$$p<p_L(0)$$
+is false. Furthermore, since $k^*\in\{1,\ldots,n\}$,
+$$0\geq k^*$$
+is also false. Therefore
+$$p<p_L(k)\Leftrightarrow k\geq k^*,\quad\forall\,k\in\{0,\ldots,n\}.$$
+Thus, the following events are equal:
+$$\left\{p<p_L(K_p)\right\}=\left\{K_p\geq k^*\right\}$$
+which implies that
+$$P(p_L(K_p)>p)=P(K_p\geq k^*)<\alpha/2.$$
+\end{proof}
+
+
+\begin{lemma}\label{lemma:upper-endpoint-probability-inequality}
+Let $n\in\mathbb{Z}_{>0}$, $\alpha\in(0,1)$, $p\in[0,1]$, $K_p\sim Bin(n,p)$, and 
+$$p_U(k):= \begin{cases}
+    F^{-1}_{Beta(k+1,n-k)}(1-\alpha/2), &k\in\{0,\ldots,n-1\},\\
+    1, &k=n.\\
+\end{cases}$$
+Then
+$$P(p_U(K_p)<p)<\alpha/2.$$
+\end{lemma}
+\begin{proof}
+As stated in \autoref{lemma:Upper_Clopper-Pearson_endpoint}, for $k\in\{0,\ldots,n-1\}$, 
+$$P(K_p\leq k)=\alpha/2 \Leftrightarrow p=p_U(k).$$
+Furthermore, increasing the probability of success, $p$, decreases the likelihood of seeing $k$ or less successes. In other words, $P(K_p \leq k)$ is strictly decreasing in $p$.
+This implies that 
+$$p>p_U(k) \Leftrightarrow P(K_p \leq k)<\alpha/2.$$
+In the case that $(n,p)$ is so that $P(K_p\leq k) \nless \alpha/2$ for all $k\in\{0,\ldots,n-1\}$, then necessarily $p\leq p_U(k)$ for all said $k$.
+Furthermore, since by definition $p_U(n)=1 \geq p$ for all $p\in [0,1]$ this would mean that
+$$p\leq p_U(k),\;\forall \,k\in \{0,\ldots, n\}.$$
+Consequently, in this case, we have
+$$P(p_U(K_p)<p)=0<\alpha/2.$$
+Otherwise, inevitably $\exists\, k^*\in\{0,\ldots,n-1\}$ such that
+$$k^*=\max\{k\in\{0,\ldots,n-1\}:\,P(K_p\leq k)<\alpha/2\}.$$
+Since $P(K_p\leq k)$ increases in $k$, for any $k\leq k^*$ the inequality $P(K_p \leq k)<\alpha /2$ holds. By the definition of $k^*$, it does not hold for any $k>k^*$. Therefore
+$$P(K_p \leq k) <\alpha /2 \Leftrightarrow k\leq k^*,\quad\forall\,k\in\{0,\ldots,n-1\},$$
+so, for $k\in\{0,\ldots,n-1\}$,
+$$p>p_U(k)\Leftrightarrow k\leq k^*.$$
+Note that since $p_U(n)=1\geq p$,
+$$p>p_U(n)$$
+is false. Furthermore, since $k^*\in\{0,\ldots,n-1\}$,
+$$n\leq k^*$$
+is also false. Therefore
+$$p>p_U(k)\Leftrightarrow k\leq k^*,\quad\forall\,k\in\{0,\ldots,n\}.$$
+Thus, the following events are equal:
+$$\left\{p>p_U(K_p)\right\}=\left\{K_p\leq k^*\right\}$$
+which implies that
+$$P(p_U(K_p)<p)=P(K_p\leq k^*)<\alpha/2.$$
+\end{proof}
+
+\begin{corollary}\label{lemma:clopper-pearson-interval}
+    Let $n\in\mathbb{Z}_{>0}$, $\alpha\in(0,1)$, $p\in[0,1]$, $K_p\sim Bin(n,p)$. Let $p_L$ and $p_U$ be as defined in \autoref{lemma:lower-endpoint-probability-inequality} and \autoref{lemma:upper-endpoint-probability-inequality}.
+    then 
+    $$P(p_L(K_p)\leq p\leq p_U(K_p))> 1-\alpha$$
+    The interval $[p_L(K_p),p_U(K_p)]$ is commonly referred to as the Clopper-Pearson interval, as it was introduced by C. J. Clopper and E. S. Pearson in 1934 \cite{clopper1934}.
+    \end{corollary}
+\begin{proof}
+In \autoref{lemma:lower-endpoint-probability-inequality} and \autoref{lemma:upper-endpoint-probability-inequality}, it is proven that
+    $$\begin{aligned}
+        P(p<p_L(K_p))&<\alpha/2,\\
+        P(p>p_U(K_p))&<\alpha/2.
+    \end{aligned}$$
+Since
+$$\{p\notin[p_L(K_p),\,p_U(K_p)]\}
+=
+\{p<p_L(K_p)\}\cup\{p>p_U(K_p)\},$$
+the union bound gives
+$$\begin{aligned}
+P(p\notin[p_L(K_p),\,p_U(K_p)])
+&\leq P(p<p_L(K_p))+P(p>p_U(K_p))\\
+&<\alpha/2+\alpha/2\\
+&=\alpha.
+\end{aligned}$$
+Since
+$$P(p\notin[p_L(K_p),\,p_U(K_p)]) + P(p\in[p_L(K_p),\,p_U(K_p)]) = 1$$
+we can conclude that 
+$$P\left(p\in[p_L(K_p),\,p_U(K_p)]\right)>1-\alpha \Leftrightarrow P(p_L(K_p)\leq p \leq p_U(K_p))> 1-\alpha$$
+\end{proof}
+
+
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{clopper1934}
+C. J. Clopper and E. S. Pearson,
+``The Use of Confidence or Fiducial Limits Illustrated in the Case of the Binomial,''
+\textit{Biometrika},
+vol. 26, no. 4, pp. 404--413, 1934.
+
+\end{thebibliography}
+
+
+\end{document}

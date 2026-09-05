@@ -1,485 +1,333 @@
 from __future__ import annotations
 
-from abc import abstractmethod, ABC
-from types import NotImplementedType
-from typing import Iterator
-import sympy as sp
-from numbers import Real
-from src.problab.distributions.base import Distribution, DegenerateDistribution
-import numpy as np
-from collections.abc import Callable
-from sympy.utilities.lambdify import implemented_function
 from itertools import count
-from operator import index
+from numbers import Real, Complex
+from typing import Callable, TypeVar
+import numpy as np
+import sympy as sp
 
-_ROUND_FUNCTION = implemented_function(
-    sp.Function("round"),
-    np.round,
-)
+from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
+from src.problab.distributions.base import Distribution
+from src.problab.events import Event
+from src.problab.operations import ADD, SUBTRACT, MULTIPLY, MODULO, LT, LTE, GT, GTE, EQ, NEQ
+from src.problab.probability.intervals import ProbabilityInterval, ConfidenceInterval
+from src.problab.random_variables.context import RealizationContext
+from src.problab.random_variables.nodes import DistributionNode, Node, ConstantNode, OperationNode
+from src.problab.statistics.quantiles import quantile_confidence_interval
+from src.problab.value_sets import is_known_subset, COMPLEXES, REALS, ValueSet
 
-class RandomVariableSymbol(sp.Dummy):
-
-    def __new__(cls, rv: _SourceRandomVariable, name: str | None = None) -> RandomVariableSymbol:
-        symbol = super().__new__(cls, name)
-        symbol.__random_variable = rv
-        return symbol
-
-    @property
-    def random_variable(self) -> _SourceRandomVariable:
-        return self.__random_variable
-
-class RandomVariable(ABC):
+class RandomVariable:
 
     _count = count()
-    _applied_function_count = count()
 
-    @staticmethod
-    def _from_expression(expression: sp.Expr, name: str | None = None) -> RandomVariable:
-        return _DerivedRandomVariable(expression=expression, name=name)
+    def __init__(
+            self,
+            distribution: Distribution,
+            name: str | None = None,
+    ) -> None:
+        self._distribution = distribution
 
+        if name is None: self._name = "RV_" + str(next(RandomVariable._count) + 1)
+        else: self._name = name
 
-    @staticmethod
-    def _to_expression(value: object) -> sp.Expr | NotImplementedType:
-        if isinstance(value, RandomVariable):
-            return value.expression
+        self._node = DistributionNode(distribution)
 
-        try:
-            expression = sp.sympify(value, strict=True)
-        except (sp.SympifyError, TypeError):
-            return NotImplemented
+    @classmethod
+    def _from_node(
+            cls,
+            node: Node,
+            name: str | None = None,
+    ) -> RandomVariable:
+        rv = cls.__new__(cls)
 
-        if not isinstance(expression, sp.Expr):
-            return NotImplemented
+        rv._node = node
+        rv._name = name if name is not None else "RV_" + str(next(cls._count) + 1)
 
-        if expression.is_number is not True:
-            return NotImplemented
-
-        if expression.is_real is not True:
-            return NotImplemented
-
-        return expression
-
-    def __new__(cls,
-                *args: object,
-                **kwargs: object,) -> RandomVariable:
-        if cls is RandomVariable:
-            return object.__new__(_SourceRandomVariable)
-
-        return object.__new__(cls)
-
-    def __init__(self, name: str | None = None) -> None:
-        self._name = (
-            f"RV_{next(RandomVariable._count)}"
-            if name is None
-            else name
-        )
-
-    @property
-    @abstractmethod
-    def expression(self) -> sp.Expr:
-        ...
-
-    @abstractmethod
-    def sample(self, num_samples: int | None = None) -> np.ndarray:
-        ...
+        return rv
 
     @property
     def name(self) -> str:
         return self._name
 
-    def realize(self) -> Real:
-        return self.sample(1).item()
+    def realize(self):
+        return self.sample()
 
-    def apply(self, function: Callable[[Real], Real], name: str = None) -> RandomVariable:
+    def sample(self, num_samples: int = 1,  rng: np.random.Generator | None = None,) -> np.ndarray:
 
-        function_name = name if name is not None else f"f_{next(self._applied_function_count)}"
+        if num_samples < 1:
+            raise ValueError("Number of samples must be positive")
 
-        f = implemented_function(
-            sp.Function(function_name),
-            np.vectorize(function),
-        )
+        return RealizationContext(num_samples, rng).evaluate(self._node)
 
-        return self._from_expression(f(self.expression))
+    def _is_real_or_complex(self) -> bool:
+        return is_known_subset(self._node.value_set, COMPLEXES)
 
-    def __repr__(self) -> str:
-        return repr(self.expression)
+    def _binary_operation(
+            self,
+            other: RandomVariable | Complex,
+            operation: Callable,
+            reverse: bool = False,
+    ) -> RandomVariable:
 
-    def __str__(self) -> str:
-        return str(self.expression)
-
-    def __add__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression + other_expression)
-
-    def __radd__(self, other: object) -> RandomVariable | NotImplementedType:
-        return self.__add__(other)
-
-    def __sub__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression - other_expression)
-
-    def __rsub__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(other_expression - self.expression)
-
-    def __mul__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression * other_expression)
-
-    def __rmul__(self, other: object) -> RandomVariable | NotImplementedType:
-        return self.__mul__(other)
-
-    def __truediv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression / other_expression)
-
-    def __rtruediv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(other_expression / self.expression)
-
-    def __floordiv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression // other_expression)
-
-    def __rfloordiv__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(other_expression // self.expression)
-
-    def __mod__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(self.expression % other_expression)
-
-    def __rmod__(self, other: object) -> RandomVariable | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-        return self._from_expression(other_expression % self.expression)
-
-    def __pow__(self, exponent: object, modulo: object | None = None) -> RandomVariable | NotImplementedType:
-        if modulo is not None: return NotImplemented
-        if (exponent_expression := self._to_expression(exponent)) is NotImplemented: return NotImplemented
-        return _DerivedRandomVariable(expression=self.expression ** exponent_expression)
-
-    def __rpow__(self, base: object) -> RandomVariable | NotImplementedType:
-        if (base_expression := self._to_expression(base)) is NotImplemented: return NotImplemented
-        return self._from_expression(base_expression ** self.expression)
-
-    def __neg__(self) -> RandomVariable:
-        return self._from_expression(sp.simplify(-self.expression))
-
-    def __pos__(self) -> RandomVariable:
-        return self._from_expression(+self.expression)
-
-    def __abs__(self) -> RandomVariable:
-        return self._from_expression(abs(self.expression))
-
-    def __divmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-
-        quotient_expression, remainder_expression = divmod(self.expression, other_expression)
-
-        return (
-            _DerivedRandomVariable(expression=quotient_expression),
-            _DerivedRandomVariable(expression=remainder_expression),
-        )
-
-    def __rdivmod__(self, other: object) -> tuple[RandomVariable, RandomVariable] | NotImplementedType:
-        if (other_expression := self._to_expression(other)) is NotImplemented: return NotImplemented
-
-        quotient_expression, remainder_expression = divmod(other_expression, self.expression)
-
-        return (
-            _DerivedRandomVariable(expression=quotient_expression),
-            _DerivedRandomVariable(expression=remainder_expression),
-        )
-
-    def __round__(self, ndigits: int | None = None) -> RandomVariable:
-        if ndigits is None:
-            digits = 0
-        else:
-            try:
-                digits = index(ndigits)
-            except TypeError:
-                raise TypeError("num_digits must be an integer or None.") from None
-
-        return self._from_expression(
-            _ROUND_FUNCTION(
-                self.expression,
-                digits,
-            )
-        )
-
-class _SourceRandomVariable(RandomVariable):
-
-    def __init__(self,
-                 distribution: Distribution,
-                 name: str | None = None):
-
-        if not isinstance(distribution, Distribution):
-            raise TypeError("A distribution must be provided.")
-
-        super().__init__(name)
-
-        self._distribution: Distribution = distribution
-        self._symbol: RandomVariableSymbol = RandomVariableSymbol(self, name=self._name)
-
-    @property
-    def expression(self) -> RandomVariableSymbol:
-        return self._symbol
-
-    @property
-    def distribution(self) -> Distribution:
-        return self._distribution
-
-    @distribution.setter
-    def distribution(self, distribution: Distribution) -> None:
-        if not isinstance(distribution, Distribution):
-            raise TypeError("'distribution' must be a Distribution instance")
-
-        self._distribution = distribution
-
-    def sample(self, num_samples: int | None = None) -> np.ndarray:
-        return self.distribution.sample(num_samples)
-
-class _DerivedRandomVariable(RandomVariable):
-
-    def __init__(self,
-                 expression: sp.Expr,
-                 name: str | None = None):
-
-        if not isinstance(expression, sp.Expr):
-            raise TypeError("An expression must be provided.")
-
-        symbols: list[RandomVariableSymbol] = []
-
-        for symbol in sorted(expression.free_symbols, key=sp.default_sort_key):
-            if not isinstance(symbol, RandomVariableSymbol):
-                raise TypeError("The expression may only contain RandomVariableSymbol instances.")
-
-            symbols.append(symbol)
-
-        super().__init__(name)
-
-        self._expression = expression
-        self._symbols = tuple(symbols)
-
-        self._evaluator = sp.lambdify(
-            self._symbols,
-            self._expression,
-            modules="numpy",
-        )
-
-    @property
-    def expression(self) -> sp.Expr:
-        return self._expression
-
-    def sample(self, num_samples: int | None = None) -> np.ndarray:
-        size = 1 if num_samples is None else num_samples
-        if size < 1: raise ValueError("'num_samples' must be at least 1.")
-
-        realizations = [symbol.random_variable.sample(size) for symbol in self._symbols]
-
-        result = np.asarray(self._evaluator(*realizations))
-
-        if result.ndim == 0:
-            return np.full(size, result.item())
-
-        return result
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class RandomArray:
-
-    @staticmethod
-    def _to_array_operand(other: object,) -> np.ndarray | NotImplementedType:
-        if isinstance(other, RandomArray): return other.__array
-        if isinstance(other, np.ndarray): return other
-        return NotImplemented
-
-    def __init__(self, components: object, *, copy: bool | None = None, ndmin: int = 0) -> None:
-
-        self.__array: np.ndarray
-
-        try:
-            self.__array = np.array(components, dtype=object, copy=copy, ndmin=ndmin)
-        except (TypeError, ValueError) as exc:
-            raise TypeError(
-                "'components' must be convertible to a NumPy array"
-            ) from exc
-
-        for idx, component in np.ndenumerate(self.__array):
-            if isinstance(component, Real):
-                self.__array[idx] = RandomVariable(
-                    distribution=DegenerateDistribution(value=component)
-                )
-            elif isinstance(component, RandomVariable):
-                continue
-            else:
-                raise TypeError(
-                    f"Invalid element at index {idx}: "
-                    f"expected RandomVariable or Real, "
-                    f"got {type(component).__name__}"
-                )
-
-    __hash__ = None
-
-    def __repr__(self) -> str:
-        return "[" + ", ".join([repr(RV) for RV in self.__array]) + "]"
-
-    def __str__(self) -> str:
-        return "[" + ", ".join([str(RV) for RV in self.__array]) + "]"
-
-    def __len__(self) -> int:
-        return len(self.__array)
-
-    def __iter__(self) -> Iterator[RandomVariable |np.ndarray]:
-        return iter(self.__array)
-
-    def __getitem__(self, index: int) -> Real:
-        return self.__array[index]
-
-    def __eq__(self, other: object) -> bool | NotImplementedType:
-
-        if not isinstance(other, RandomArray):
+        if not self._is_real_or_complex():
             return NotImplemented
 
-        if self.__array.shape != other.__array.shape:
-            return False
+        if not isinstance(other, (RandomVariable, Complex)):
+            return NotImplemented
 
-        return all(
-            component1 == component2
-            for component1, component2 in zip(
-                self.__array.flat,
-                other.__array.flat,
+        if isinstance(other, RandomVariable):
+            if not other._is_real_or_complex():
+                return NotImplemented
+        else:
+            other = RandomVariable._from_node(
+                ConstantNode(other)
+            )
+
+        result_value_set = (
+            REALS
+            if is_known_subset(self._node.value_set, REALS)
+               and is_known_subset(other._node.value_set, REALS)
+            else COMPLEXES
+        )
+
+        inputs = (
+            (other._node, self._node)
+            if reverse
+            else (self._node, other._node)
+        )
+
+        return RandomVariable._from_node(
+            OperationNode(
+                operation=operation,
+                inputs=inputs,
+                value_set=result_value_set,
             )
         )
 
-    def __add__(self, other: object) -> RandomArray | NotImplementedType:
+    def interval(self,
+                 alpha: float,
+                 num_samples: int | None = None,
+                 rng: np.random.Generator | None = None
+                 ) -> ProbabilityInterval:
 
-        other_array = self._to_array_operand(other)
+        if not is_known_subset(self._node.value_set, REALS):
+            raise TypeError("Probability intervals are only defined for real-valued random variables." )
 
-        if other_array is NotImplemented: return NotImplemented
+        if not 0 < alpha < 1:
+            raise ValueError("'alpha' must be between 0 and 1.")
 
-        if self.__array.shape != other_array.shape:
-            raise ValueError(
-                f"Incompatible shapes: "
-                f"{self.__array.shape} and {other_array.shape}"
+        samples = self.sample(
+            num_samples=num_samples,
+            rng=rng,
+        )
+
+        lower_quantile = alpha / 2
+        upper_quantile = 1 - alpha / 2
+
+        lower = float(np.quantile(samples, lower_quantile))
+        upper = float(np.quantile(samples, upper_quantile))
+
+        return ProbabilityInterval(
+            lower=lower,
+            upper=upper,
+            alpha=alpha,
+            is_estimate=True
+        )
+
+    def apply(
+            self,
+            function: Callable,
+            *others: RandomVariable,
+            value_set: ValueSet,
+            vectorized: bool = False,
+    ) -> RandomVariable:
+
+        if not callable(function):
+            raise TypeError("'function' must be callable.")
+
+        if not all(isinstance(other, RandomVariable) for other in others):
+            raise TypeError("'others' must be RandomVariable instances.")
+
+        inputs = (
+            self._node,
+            *(other._node for other in others),
+        )
+
+        if vectorized:
+            operation = function
+        else:
+            operation = lambda *values: np.asarray([
+                function(*realization)
+                for realization in zip(*values)
+            ])
+
+        return RandomVariable._from_node(
+            OperationNode(
+                operation=operation,
+                inputs=inputs,
+                value_set=value_set,
+            )
+        )
+
+
+    def __add__(self, other):
+        return self._binary_operation(other, ADD)
+
+    def __radd__(self, other):
+        return self._binary_operation(other, ADD)
+
+    def __sub__(self, other):
+        return self._binary_operation(other, SUBTRACT)
+
+    def __rsub__(self, other):
+        return self._binary_operation(other, SUBTRACT, reverse=True)
+
+    def __mul__(self, other):
+        return self._binary_operation(other, MULTIPLY)
+
+    def __rmul__(self, other):
+        return self._binary_operation(other, MULTIPLY)
+
+    def __truediv__(self, other, DIVIDE=None):
+        return self._binary_operation(other, DIVIDE)
+
+    def __rtruediv__(self, other, DIVIDE=None):
+        return self._binary_operation(other, DIVIDE, reverse=True)
+
+    def __mod__(self, other: RandomVariable | Real) -> RandomVariable:
+
+        if not is_known_subset(self._node.value_set, REALS):
+            return NotImplemented
+
+        if not isinstance(other, (RandomVariable, Real)):
+            return NotImplemented
+
+        if isinstance(other, RandomVariable):
+            if not is_known_subset(other._node.value_set, REALS):
+                return NotImplemented
+        else:
+            other = RandomVariable._from_node(
+                ConstantNode(other)
             )
 
-        return RandomArray(components=self.__array + other_array)
+        return RandomVariable._from_node(
+            OperationNode(
+                operation=MODULO,
+                inputs=(self._node, other._node),
+                value_set=REALS,
+            )
+        )
 
-    def __radd__(self, other: object) -> RandomArray | NotImplementedType:
-        return self.__add__(other)
+    def __rmod__(self, other: RandomVariable | Real) -> RandomVariable:
 
-    def __sub__(self, other: object) -> RandomArray | NotImplementedType:
+        if not is_known_subset(self._node.value_set, REALS):
+            return NotImplemented
 
-        other_array = self._to_array_operand(other)
+        if not isinstance(other, (RandomVariable, Real)):
+            return NotImplemented
 
-        if other_array is NotImplemented: return NotImplemented
-
-        if self.__array.shape != other_array.shape:
-            raise ValueError(
-                f"Incompatible shapes: "
-                f"{self.__array.shape} and {other_array.shape}"
+        if isinstance(other, RandomVariable):
+            if not is_known_subset(other._node.value_set, REALS):
+                return NotImplemented
+        else:
+            other = RandomVariable._from_node(
+                ConstantNode(other)
             )
 
-        return RandomArray(components=self.__array - other_array)
-
-    def __rsub__(self, other: object) -> RandomArray | NotImplementedType:
-
-        other_array = self._to_array_operand(other)
-
-        if other_array is NotImplemented: return NotImplemented
-
-        if self.__array.shape != other_array.shape:
-            raise ValueError(
-                f"Incompatible shapes: "
-                f"{self.__array.shape} and {other_array.shape}"
+        return RandomVariable._from_node(
+            OperationNode(
+                operation=MODULO,
+                inputs=(other._node,self._node),
+                value_set=REALS,
             )
+        )
 
-        return RandomArray(components=other_array - self.__array)
+    def _inequality_comparison(self, operator: Callable, other: RandomVariable | Real) -> Event:
 
-    def __mul__(self, other: object) -> RandomArray | NotImplementedType:
+        if not is_known_subset(self._node.value_set, REALS):
+            return NotImplemented
 
-        other_array = self._to_array_operand(other)
+        if isinstance(other, Real):
+            other_node = ConstantNode(other)
 
-        if other_array is NotImplemented: return NotImplemented
+        elif isinstance(other, RandomVariable):
+            if not is_known_subset(other._node.value_set, REALS):
+                return NotImplemented
 
-        if self.__array.shape != other_array.shape:
-            raise ValueError(
-                f"Incompatible shapes: "
-                f"{self.__array.shape} and {other_array.shape}"
+            other_node = other._node
+
+        else:
+            return NotImplemented
+
+        return Event(
+            OperationNode(
+                operation=operator,
+                inputs=(self._node, other_node),
+                value_set=sp.FiniteSet(False, True),
             )
+        )
 
-        return RandomArray(components=self.__array * other_array)
+    def _equality_comparison(self, operator: Callable, other: RandomVariable | Real) -> Event:
+        if isinstance(other, RandomVariable):
+            other_node = other._node
+        else:
+            other_node = ConstantNode(other)
 
-    def __rmul__(self, other: object) -> RandomArray | NotImplementedType:
-        return self.__mul__(other)
+        return Event(
+            OperationNode(
+                operation=operator,
+                inputs=(self._node, other_node),
+                value_set=sp.FiniteSet(False, True),
+            )
+        )
 
-    # Implements division of every component by a scalar or compatible operand.
-    def __truediv__(self, scalar: object) -> RandomArray | NotImplementedType:
-        ...
+    def __lt__(self, other: RandomVariable | Real) -> Event:
+        return self._inequality_comparison(LT, other)
 
-    # Implements the matrix-multiplication operator, typically as a dot product or matrix product.
-    def __matmul__(self, other: object) -> Real | NotImplementedType:
-        ...
+    def __le__(self, other: RandomVariable | Real) -> Event:
+        return self._inequality_comparison(LTE, other)
 
-    # Returns a new RandomArray with every component negated.
-    def __neg__(self) -> RandomArray:
-        ...
+    def __gt__(self, other: RandomVariable | Real) -> Event:
+        return self._inequality_comparison(GT, other)
 
-    # Returns the RandomArray unchanged or as an equivalent positive copy.
-    def __pos__(self) -> RandomArray:
-        ...
+    def __ge__(self, other: RandomVariable | Real) -> Event:
+        return self._inequality_comparison(GTE, other)
 
-    # Returns a new RandomArray containing the absolute value of every component.
-    def __abs__(self) -> RandomArray:
-        new_array = np.empty_like(self.__array, dtype=object)
+    def __eq__(self, other: RandomVariable | Real) -> Event:
+        return self._equality_comparison(EQ, other)
 
-        for idx, component in np.ndenumerate(self.__array):
-            new_array[idx] = abs(component)
+    def __ne__(self, other: RandomVariable | Real) -> Event:
+        return self._equality_comparison(NEQ, other)
 
-        return RandomArray(components=new_array)
+    def __repr__(self):
+        return (
+            f"RandomVariable("
+            f"name={self._name!r}, "
+            f"value_set={self._node.value_set!r}"
+            f")"
+        )
 
-    # Calculates the dot product between this array and another vector.
-    def dot(self, other: RandomArray) -> Real:
-        ...
+    def __str__(self):
+        return self.name
 
-    # Calculates the three-dimensional cross product between this array and another vector.
-    def cross(self, other: RandomArray) -> RandomArray:
-        ...
+    def quantile_confidence_interval(self,
+                                     q: float,
+                                     alpha: float = DEF_ALPHA,
+                                     num_samples: int = DEF_NUM_SAMPLES,
+                                     rng: np.random.Generator | None = None
+                                     ) -> ConfidenceInterval:
 
-    # Calculates the Euclidean length of the vector.
-    def norm(self) -> Real:
-        ...
+        samples = self.sample(
+            num_samples=num_samples,
+            rng=rng,
+        )
 
-    # Calculates the square of the Euclidean length without taking a square root.
-    def norm_squared(self) -> Real:
-        ...
+        return quantile_confidence_interval(
+            samples=samples,
+            q=q,
+            alpha=alpha,
+        )
 
-    # Returns a vector with the same direction and a norm of one.
-    def normalized(self) -> RandomArray:
-        ...
 
-    # Calculates the Euclidean distance between this vector and another vector.
-    def distance_to(self, other: RandomArray) -> Real:
-        ...
 
-    # Calculates the angle between this vector and another vector.
-    def angle_to(self, other: RandomArray) -> Real:
-        ...
-
-    # Returns the projection of this vector onto another vector.
-    def project_onto(self, other: RandomArray) -> RandomArray:
-        ...
 

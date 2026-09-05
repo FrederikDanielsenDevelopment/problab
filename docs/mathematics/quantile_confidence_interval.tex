@@ -1,0 +1,228 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\providecommand*{\lemmaautorefname}{Lemma}
+
+\newtheorem{corollary}[lemma]{Corollary}
+\providecommand*{\corollaryautorefname}{Corollary}
+
+\renewcommand{\refname}{\raggedright References}
+
+\begin{document}
+
+\begin{center}
+\section*{Derivation of a Quantile Confidence Interval Based on Order Statistics}
+{\small Frederik Danielsen}
+\end{center}
+
+\vspace{1em}
+
+\noindent This note provides a mathematical derivation of a confidence interval for a quantile $\xi_q$ based on order statistics. The results presented here are classical and are not original to this note. They are derived independently to ensure a thorough understanding of the underlying mathematics, to present the arguments in a form suited to the Problab\footnote{\url{https://github.com/FrederikDanielsenDevelopment/problab}} project, and to obtain conclusions that are directly useful for the implementation in Problab. The derivation assumes i.i.d. samples $X_1,\ldots,X_n$ satisfying $P(X_i\leq\xi_q)=q$ and a significance level $\alpha\in(0,1)$, corresponding to a target coverage level of $1-\alpha$. In the first lemma, a confidence interval of the form $[X_{(k_L^*)},X_{(k_U^*+1)}]$ is derived by choosing the indices $k_L^*$ and $k_U^*$ such that the two binomial tail probabilities are bounded by $\alpha/2$. In the second lemma, it is shown that the iterative procedures used in the implementation terminate at exactly these optimal indices.
+
+Practically, these results enable Problab to return finite-sample confidence intervals with coverage probability at least $1-\alpha$ for estimated quantiles, such as medians or percentiles.
+
+\vspace{2em}
+
+\begin{lemma}
+Let $X_i$ with $i\in\{1,\ldots,n-1\}$ be i.i.d samples. Suppose that $P(X_i\leq \xi_q)=q$ for all $i$, some $q\in(0,1)$, and $\xi_q$ in the value space of $X_i$. Let
+$$I_i =
+\begin{cases}
+1,\quad X_i\leq\xi_q,\\
+0,\quad X_i>\xi_q.
+\end{cases}$$
+and let
+$$K=\sum_{i=1}^n I_i\sim Bin(n,q).$$
+Let $k_L^*$ and $k_U^*$ solve
+$$
+\begin{aligned}
+k_L^*
+&=
+\max_{k_L\in\{1,\ldots,n-1\}}
+\left\{
+k_L:
+P(K<k_L)\leq\frac{\alpha}{2}
+\right\}\\
+k_U^*
+&=
+\min_{k_U\in\{1,\ldots,n-1\}}
+\left\{
+k_U:
+P(K>k_U)\leq\frac{\alpha}{2}
+\right\}.
+\end{aligned}
+$$
+Then
+$$[X_{(k_L^*)},X_{(k_U^*+1)}]$$
+is a confidence interval for $\xi_q$ with coverage probability at least $1-\alpha$. Furthermore, among the intervals satisfying the two tail constraints, solving the optimization problems above produces the narrowest interval.
+\end{lemma}
+\begin{proof}
+$I_i$ can be regarded as the outcomes of individual Bernouli trials with probability of success $q$ with
+$$K=\sum_{i=1}^nI_i\sim Bin(n,q)$$
+denoting the number of samples with values at most $\xi_q$. Now, consider the ordered samples
+$$X_{(1)},X_{(2)},\ldots,X_{(n)}.$$
+If $K\leq k_U$ for some $k_U\in\{1,\ldots,n-1\}$, that would imply that at most $k_U$ samples fell below $\xi_q$. That is, $\xi_q<X_{(k_U+1)}$. Likewise, if $K\geq k_L$ for some $k_L\in\{1,\ldots,n-1\}$, that would imply that at least $k_L$ samples fell below $\xi_q$. That is, $\xi_q\geq X_{(k_L)}$. Hence,
+$$P(k_L\leq K\leq k_U)=P(X_{(k_L)}\leq\xi_q<X_{(k_U+1)}).$$
+Therefore, if we determine $k_L$ and $k_U$ such that
+$$P(k_L\leq K \leq k_U)=1-\alpha,$$
+for some $\alpha\in(0,1)$, then the interval $[X_{(k_L)},X_{(k_U+1)}]$ is a confidence interval for $\xi_q$ with coverage probability $1-\alpha$. However, this equality is one with two unknowns and thus multiple solutions. However, we may impose an additional constraint, namely that the likelihood that $\xi_q$ lies above the confidence interval is the same as the likelihood that it lies below it $-$ at least to the extent that a discrete number of samples allows it. Specifically, we require that
+$$P(\xi_q\geq X_{(k_U+1)})=P(\xi_q<X_{(k_L)})=\alpha/2.$$
+However, as mentioned, since we are dealing with a discrete number of samples, it is likely that no $(k_L,k_U)$ exists that fulfil this exactly. Therefore, we make do with the best estimate (likely more conservative than $1-\alpha$) and require simply that
+$$
+\begin{aligned}
+P(\xi_q \geq X_{(k_U+1)})&\leq \alpha/2,\\
+P(\xi_q<X_{(k_L)})&\leq \alpha/2\\
+\Leftrightarrow\\
+P(K>k_U)&\leq \alpha/2,\\
+P(K<k_L)&\leq \alpha/2.
+\end{aligned}
+$$
+Since $\alpha<1$, any pair $(k_L,k_U)$ satisfying both tail constraints necessarily satisfies $k_L\leq k_U$. Indeed, if $k_L>k_U$, then every possible value of $K$ satisfies either $K<k_L$ or $K>k_U$, and therefore
+$$
+1=P\big((K<k_L)\cup(K>k_U)\big)
+\leq P(K<k_L)+P(K>k_U)
+\leq \alpha,
+$$
+which is a contradiction. Furthermore, in case you were wondering, since the lower endpoint $X_{(k_L)}$ requires $k_L\geq1$ and the upper endpoint $X_{(k_U+1)}$ requires $k_U\leq n-1$, the inequality $k_L\leq k_U$ implies that any feasible pair must satisfy
+$$
+k_L,k_U\in\{1,\ldots,n-1\}.
+$$
+To obtain the narrowest confidence interval satisfying these constraints, we choose the largest possible $k_L$ and the smallest possible $k_U$. Thus, we solve
+$$
+\begin{aligned}
+k_L^*
+&=
+\max_{k_L\in\{1,\ldots,n-1\}}
+\left\{
+k_L:
+P(K<k_L)\leq\frac{\alpha}{2}
+\right\},\\
+k_U^*
+&=
+\min_{k_U\in\{1,\ldots,n-1\}}
+\left\{
+k_U:
+P(K>k_U)\leq\frac{\alpha}{2}
+\right\}.
+\end{aligned}
+$$
+In this way we ensure that
+$$P(k_L^*\leq K \leq k_U^*)=P(X_{(k_L^*)}\leq \xi_q< X_{(k_U^*+1)})\geq 1-\alpha.$$
+Then the interval
+$$[X_{(k_L^*)},X_{(k_U^*+1)}]$$
+is at least as conservative as a confidence interval with coverage probability $1-\alpha$.
+\end{proof}
+
+\begin{lemma}
+Let $K\sim Bin(n,q)$ and $\alpha\in(0,1)$, and suppose that the optimization problems
+$$
+\begin{aligned}
+k_L^*
+&=
+\max_{k\in\{1,\ldots,n-1\}}
+\left\{
+k:
+P(K<k)\leq\frac{\alpha}{2}
+\right\},\\
+k_U^*
+&=
+\min_{k\in\{1,\ldots,n-1\}}
+\left\{
+k:
+P(K>k)\leq\frac{\alpha}{2}
+\right\}
+\end{aligned}
+$$
+have solutions. Consider the iterative procedures
+$$
+\begin{aligned}
+&k_L\leftarrow 1,\\
+&\text{while } k_L<n-1
+\text{ and }
+P(K\leq k_L)\leq\frac{\alpha}{2},
+\quad
+k_L\leftarrow k_L+1,
+\end{aligned}
+$$
+and
+$$
+\begin{aligned}
+&k_U\leftarrow n-1,\\
+&\text{while } k_U>1
+\text{ and }
+P(K\geq k_U)\leq\frac{\alpha}{2},
+\quad
+k_U\leftarrow k_U-1.
+\end{aligned}
+$$
+Then the procedures terminate with
+$$
+k_L=k_L^*
+\qquad\text{and}\qquad
+k_U=k_U^*.
+$$
+\end{lemma}
+\begin{proof}
+For the lower index, observe that increasing the current value $k_L$ to $k_L+1$ is permissible exactly when
+$$
+P(K<k_L+1)=P(K\leq k_L)\leq\frac{\alpha}{2}.
+$$
+Thus, at every iteration, the algorithm increments $k_L$ only when the next larger value satisfies the lower-tail constraint. Since $k_L$ increases by one at each iteration and is bounded above by $n-1$, the procedure terminates.
+If the procedure stops before reaching $n-1$, then increasing $k_L$ by one would violate the constraint. Indeed, the next candidate would be $k_L+1$, and for this candidate the constraint is
+$$
+P(K<k_L+1)\leq\frac{\alpha}{2}.
+$$
+Since
+$$
+P(K<k_L+1)=P(K\leq k_L),
+$$
+and the loop has stopped, this inequality is no longer satisfied. Therefore, $k_L+1$ is not feasible. Since $P(K<k)$ is nondecreasing as $k$ increases, no larger value can be feasible either. Hence, the returned $k_L$ is the largest feasible value, so
+$$
+k_L
+=
+\max_{k\in\{1,\ldots,n-1\}}
+\left\{
+k:
+P(K<k)\leq\frac{\alpha}{2}
+\right\}
+=
+k_L^*.
+$$
+If the procedure instead terminates at $k_L=n-1$, then $n-1$ is itself the largest possible value in the domain, so again $k_L=k_L^*$.
+For the upper index, observe that decreasing the current value $k_U$ to $k_U-1$ is permissible exactly when
+$$
+P(K>k_U-1)=P(K\geq k_U)\leq\frac{\alpha}{2}.
+$$
+Thus, at every iteration, the algorithm decrements $k_U$ only when the next smaller value satisfies the upper-tail constraint. Since $k_U$ decreases by one at each iteration and is bounded below by $1$, the procedure terminates.
+If the procedure stops before reaching $1$, then decreasing $k_U$ by one would violate the constraint. Indeed, the next candidate would be $k_U-1$, and for this candidate the constraint is
+$$
+P(K>k_U-1)\leq\frac{\alpha}{2}.
+$$
+Since
+$$
+P(K>k_U-1)=P(K\geq k_U),
+$$
+and the loop has stopped, this inequality is no longer satisfied. Therefore, $k_U-1$ is not feasible. Since $P(K>k)$ increases as $k$ decreases, no smaller value can be feasible either. Hence, the returned $k_U$ is the smallest feasible value, so
+$$
+k_U
+=
+\min_{k\in\{1,\ldots,n-1\}}
+\left\{
+k:
+P(K>k)\leq\frac{\alpha}{2}
+\right\}
+=
+k_U^*.
+$$
+If the procedure instead terminates at $k_U=1$, then $1$ is itself the smallest possible value in the domain, so again $k_U=k_U^*$.
+\end{proof}
+
+
+
+\end{document}
+
