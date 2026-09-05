@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Callable, Any
 
 import numpy as np
-import scipy as sp
+import sympy as sp
 
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.context import RealizationContext
@@ -22,7 +22,7 @@ class Node(ABC, Generic[T]):
 
     @property
     @abstractmethod
-    def dependencies(self) -> tuple[Node[Any], ...] | None:
+    def dependencies(self) -> set[Node[Any]]:
         # Only top level of dependencies not a graph of dependencies of dependencies.
         ...
 
@@ -32,7 +32,7 @@ class Node(ABC, Generic[T]):
 
     @property
     def has_dependencies(self) -> bool:
-        return self.dependencies is not None
+        return bool(self.dependencies)
 
 class ConstantNode(Node[T]):
 
@@ -48,8 +48,8 @@ class ConstantNode(Node[T]):
         return sp.FiniteSet(self._value)
 
     @property
-    def dependencies(self) -> None:
-        return None
+    def dependencies(self) -> set[Node[Any]]:
+        return set()
 
     def _evaluate(self, context: RealizationContext) -> np.ndarray:
         return np.asarray(self._value)
@@ -69,7 +69,7 @@ class DistributionNode(Node[T]):
         return self._distribution.value_set
 
     @property
-    def dependencies(self) -> tuple[Node[Any], ...] | None:
+    def dependencies(self) -> set[Node[Any]]:
         return self._distribution.node_dependencies
 
     def _evaluate(self, context: RealizationContext) -> np.ndarray:
@@ -92,8 +92,8 @@ class OperationNode(Node[T]):
         return self._value_set
 
     @property
-    def dependencies(self) -> tuple[Node[Any], ...]:
-        return self._inputs
+    def dependencies(self) -> set[Node[Any]]:
+        return set(self._inputs)
 
     def _evaluate(self, context: RealizationContext) -> np.ndarray:
         values = tuple(

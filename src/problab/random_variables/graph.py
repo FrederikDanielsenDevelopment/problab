@@ -11,12 +11,12 @@ class NodeGraph:
                  max_size: int
                  ) -> None:
 
-        if max_size < 0:
-            raise ValueError("max_size must be non-negative")
+        if max_size < 1:
+            raise ValueError("max_size must be at least 1")
 
         self._root_node = root_node
         self._max_size = max_size
-        self._graph = nx.MultiDiGraph()
+        self._graph = nx.DiGraph()
         self._is_complete = True
         self._build_graph()
 
@@ -29,6 +29,16 @@ class NodeGraph:
     @property
     def is_complete(self) -> bool:
         return self._is_complete
+
+    @property
+    def nodes(self) -> set[Node[Any]]:
+        return set(self._graph.nodes)
+
+    def num_dependents(self, node: Node[Any]) -> int:
+        return self._graph.in_degree(node)  # for one input node this always returns an int
+
+    def num_dependencies(self, node: Node[Any]) -> int:
+        return self._graph.out_degree(node)  # for one input node this always returns an int
 
     def _build_graph(self) -> None:
         self._add_node_recursive(self._root_node)

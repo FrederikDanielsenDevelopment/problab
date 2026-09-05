@@ -27,6 +27,11 @@ class RealizationContext:
         if not self._graph.is_complete:
             raise ValueError(f"RandomVariable dependency graph exceeds the maximum size of {DEF_MAX_GRAPH_SIZE} nodes.")
 
+        self._remaining_dependants = {
+            node: self._graph.num_dependents(node)
+            for node in self._graph.nodes
+        }
+
         self._num_samples = num_samples
         self._rng = np.random.default_rng() if rng is None else rng
         self._realizations: dict[Node[Any], np.ndarray] = {}
@@ -46,6 +51,11 @@ class RealizationContext:
 
         if node not in self._realizations:
             self._realizations[node] = node._evaluate(self)
+
+            for dependency in node.dependencies:
+                self._remaining_dependants[dependency] -= 1
+                if self._remaining_dependants[dependency] == 0:
+                    self._realizations.pop(dependency)
 
         return self._realizations[node]
 

@@ -44,8 +44,8 @@ class Distribution(ABC):
         return self._parameters
 
     @property
-    def node_dependencies(self) -> tuple[Node[Any], ...] | None:
-        dependencies = tuple(
+    def node_dependencies(self) -> set[Node[Any]] | None:
+        dependencies = set(
             x for x in self.parameters
             if not isinstance(x, ConstantNode)
         )
