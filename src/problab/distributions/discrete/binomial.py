@@ -49,6 +49,7 @@ class BinomialDistribution(Distribution):
 
         self._p = p_node
 
+        super().__init__(parameters=(self._n, self._p))
 
     @property
     def value_set(self) -> ValueSet:

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar
+from typing import TypeVar, Any
 import numpy as np
 from enum import Enum
 from collections.abc import Callable
@@ -10,6 +10,7 @@ from scipy.stats import binom
 from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
 from src.problab.probability.intervals import ConfidenceInterval
 from src.problab.random_variables.context import RealizationContext
+from src.problab.random_variables.nodes import Node, ConstantNode
 from src.problab.statistics.quantiles import quantile_confidence_interval, QuantileMethod
 from src.problab.value_sets import ValueSet
 
@@ -32,6 +33,25 @@ class Distribution(ABC):
     @abstractmethod
     def sample(self, context: RealizationContext | None = None) -> np.ndarray:
         ...
+
+
+    def __init__(self, parameters: tuple[Node[Any], ...] | None = None) -> None:
+        self._parameters = parameters or None
+
+
+    @property
+    def parameters(self) -> tuple[Node[Any], ...] | None:
+        return self._parameters
+
+    @property
+    def node_dependencies(self) -> tuple[Node[Any], ...] | None:
+        dependencies = tuple(
+            x for x in self.parameters
+            if not isinstance(x, ConstantNode)
+        )
+
+        return dependencies or None
+
 
     def quantile_confidence_interval(self,
                                      q: float,

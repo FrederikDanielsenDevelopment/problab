@@ -29,6 +29,8 @@ class PoissonDistribution(Distribution):
         self._mu = mu_node
         self._value_set = NATURALS_0
 
+        super().__init__(parameters=self._mu)
+
     @property
     def value_set(self) -> ValueSet:
         return self._value_set

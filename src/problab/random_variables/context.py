@@ -2,6 +2,8 @@ from typing import Any, TypeVar
 
 import numpy as np
 
+from src.problab.random_variables._config import DEF_MAX_GRAPH_DEPTH, DEF_MAX_GRAPH_SIZE
+from src.problab.random_variables.graph import NodeGraph
 from src.problab.random_variables.nodes import Node
 
 T = TypeVar('T')
@@ -11,6 +13,7 @@ class RealizationContext:
 
     def __init__(
         self,
+        root_node: Node[Any],
         num_samples: int = 1,
         rng: np.random.Generator | None = None,
     ) -> None:
@@ -18,12 +21,18 @@ class RealizationContext:
         if num_samples < 1:
             raise ValueError("'num_samples' must be at least 1.")
 
+        self._root_node = root_node
+        self._graph = NodeGraph(root_node, max_size=DEF_MAX_GRAPH_SIZE)
+
+        if not self._graph.is_complete:
+            raise ValueError(f"RandomVariable dependency graph exceeds the maximum size of {DEF_MAX_GRAPH_SIZE} nodes.")
+
         self._num_samples = num_samples
         self._rng = np.random.default_rng() if rng is None else rng
         self._realizations: dict[Node[Any], np.ndarray] = {}
 
     def __contains__(self, item):
-        return item in self._realizations.keys()
+        return item in self._realizations
 
     @property
     def num_samples(self) -> int:
@@ -34,6 +43,7 @@ class RealizationContext:
         return self._rng
 
     def evaluate(self, node: Node[T]) -> np.ndarray:
+
         if node not in self._realizations:
             self._realizations[node] = node._evaluate(self)
 

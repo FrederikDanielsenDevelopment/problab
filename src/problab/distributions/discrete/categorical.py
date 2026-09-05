@@ -10,11 +10,11 @@ from src.problab.value_sets import ValueSet
 
 class CategoricalDistribution(Distribution):
 
-    def __init__(
-            self,
-            categories: Iterable[Any],
-            probabilities: Iterable[float],
-    ) -> None:
+    def __init__(self,
+                 categories: Iterable[Any],
+                 probabilities: Iterable[float],
+                 ) -> None:
+
         self._categories = tuple(categories)
         self._probabilities = tuple(probabilities)
 
@@ -37,6 +37,8 @@ class CategoricalDistribution(Distribution):
             raise ValueError("'probabilities' must sum to 1.")
 
         self._value_set = sp.FiniteSet(*self._categories)
+
+        super().__init__(parameters=None)
 
     @property
     def value_set(self) -> ValueSet:

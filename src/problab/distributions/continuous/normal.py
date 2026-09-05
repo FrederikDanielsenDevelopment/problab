@@ -1,4 +1,5 @@
 from numbers import Real
+from typing import Any
 
 import numpy as np
 from scipy.stats import norm
@@ -6,7 +7,7 @@ from scipy.stats import norm
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.base import RandomVariable
 from src.problab.random_variables.context import RealizationContext
-from src.problab.random_variables.nodes import ConstantNode
+from src.problab.random_variables.nodes import ConstantNode, Node
 from src.problab.value_sets import REALS, is_known_subset, POSITIVE_REALS, ValueSet
 
 class NormalDistribution(Distribution):
@@ -41,6 +42,8 @@ class NormalDistribution(Distribution):
         self._std = std_node
 
         self._value_set = REALS
+
+        super().__init__(parameters=(self._mean, self._std))
 
     @property
     def value_set(self) -> ValueSet:
