@@ -7,7 +7,7 @@ from src.problab.distributions.base import Distribution
 from src.problab.random_variables.base import RandomVariable
 from src.problab.random_variables.context import RealizationContext
 from src.problab.random_variables.nodes import ConstantNode
-from src.problab.value_sets import ValueSet, NATURALS_0, is_known_subset, NON_NEGATIVE_REALS
+from src.problab.value_sets.sets import ValueSet, NATURALS_0, is_known_subset, NON_NEGATIVE_REALS
 
 class PoissonDistribution(Distribution):
 

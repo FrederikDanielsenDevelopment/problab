@@ -5,14 +5,12 @@ from enum import Enum
 from collections.abc import Callable
 from numbers import Real
 
-from scipy.stats import binom
-
 from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
 from src.problab.probability.intervals import ConfidenceInterval
 from src.problab.random_variables.context import RealizationContext
 from src.problab.random_variables.nodes import Node, ConstantNode
 from src.problab.statistics.quantiles import quantile_confidence_interval, QuantileMethod
-from src.problab.value_sets import ValueSet
+from src.problab.value_sets.base import ValueSet
 
 T = TypeVar('T')
 
@@ -34,6 +32,10 @@ class Distribution(ABC):
     def sample(self, context: RealizationContext | None = None) -> np.ndarray:
         ...
 
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        ...
 
     def __init__(self, parameters: tuple[Node[Any], ...] | None = None) -> None:
         self._parameters = parameters or None

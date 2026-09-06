@@ -1,5 +1,4 @@
 from numbers import Real
-from typing import Any
 
 import numpy as np
 from scipy.stats import norm
@@ -7,8 +6,8 @@ from scipy.stats import norm
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.base import RandomVariable
 from src.problab.random_variables.context import RealizationContext
-from src.problab.random_variables.nodes import ConstantNode, Node
-from src.problab.value_sets import REALS, is_known_subset, POSITIVE_REALS, ValueSet
+from src.problab.random_variables.nodes import ConstantNode
+from src.problab.value_sets.sets import REALS, is_known_subset, POSITIVE_REALS, ValueSet
 
 class NormalDistribution(Distribution):
 

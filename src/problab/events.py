@@ -7,35 +7,49 @@ from src.problab.random_variables.nodes import Node, OperationNode
 
 
 class Event:
+
     def __init__(self, node: Node[bool]):
         self._node: Node[bool] = node
 
+    @property
+    def name(self) -> str:
+        return self._node.name
+
     def __and__(self, other: Event) -> Event:
 
-        if not type(other) is Event:
+        if not isinstance(other, Event):
             return NotImplemented
 
+        node_name = AND.name_func(self._node.name, other.name)
+
         return Event(OperationNode(
-            operation=AND,
+            operation=AND.operation,
             inputs=(self._node, other._node),
+            name=node_name,
             value_set=sp.FiniteSet(False, True),
         ))
 
     def __or__(self, other: Event) -> Event:
 
-        if not type(other) is Event:
+        if not isinstance(other, Event):
             return NotImplemented
 
+        node_name = OR.name_func(self._node.name, other.name)
+
         return Event(OperationNode(
-            operation=OR,
+            operation=OR.operation,
             inputs=(self._node, other._node),
+            name=node_name,
             value_set=sp.FiniteSet(False, True),
         ))
 
     def __invert__(self) -> Event:
 
+        node_name = INVERT.name_func(self._node.name)
+
         return Event(OperationNode(
-            operation=INVERT,
+            operation=INVERT.operation,
             inputs=(self._node,),
+            name=node_name,
             value_set=sp.FiniteSet(False, True),
         ))

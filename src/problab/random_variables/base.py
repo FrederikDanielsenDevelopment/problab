@@ -2,19 +2,23 @@ from __future__ import annotations
 
 from itertools import count
 from numbers import Real, Complex
-from typing import Callable, TypeVar
+from typing import Callable
 import numpy as np
 import sympy as sp
 
 from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
 from src.problab.distributions.base import Distribution
 from src.problab.events import Event
-from src.problab.operations import ADD, SUBTRACT, MULTIPLY, MODULO, LT, LTE, GT, GTE, EQ, NEQ
+from src.problab.operations import ADD, SUBTRACT, MULTIPLY, MODULO, LT, LTE, GT, GTE, EQ, NEQ, POWER, \
+    ArithmeticOperation, NEGATIVE, ABS, DIVIDE, ComparisonOperation
 from src.problab.probability.intervals import ProbabilityInterval, ConfidenceInterval
 from src.problab.random_variables.context import RealizationContext
 from src.problab.random_variables.nodes import DistributionNode, Node, ConstantNode, OperationNode
 from src.problab.statistics.quantiles import quantile_confidence_interval
-from src.problab.value_sets import is_known_subset, COMPLEXES, REALS, ValueSet
+from src.problab.value_sets._utils import is_known_subset
+from src.problab.value_sets.base import ValueSet
+from src.problab.value_sets.inference import _infer_power_value_set
+from src.problab.value_sets.sets import COMPLEXES, REALS
 
 class RandomVariable:
 
@@ -30,7 +34,7 @@ class RandomVariable:
         if name is None: self._name = "RV_" + str(next(RandomVariable._count) + 1)
         else: self._name = name
 
-        self._node = DistributionNode(distribution)
+        self._node = DistributionNode(distribution, rv_name=self._name)
 
     @classmethod
     def _from_node(
@@ -57,7 +61,9 @@ class RandomVariable:
         if num_samples < 1:
             raise ValueError("Number of samples must be positive")
 
-        return RealizationContext(num_samples, rng).evaluate(self._node)
+        return RealizationContext(root_node=self._node,
+                                  num_samples=num_samples,
+                                  rng=rng).evaluate(self._node)
 
     def _is_real_or_complex(self) -> bool:
         return is_known_subset(self._node.value_set, COMPLEXES)
@@ -65,42 +71,75 @@ class RandomVariable:
     def _binary_operation(
             self,
             other: RandomVariable | Complex,
-            operation: Callable,
+            operation: ArithmeticOperation,
             reverse: bool = False,
     ) -> RandomVariable:
-
-        if not self._is_real_or_complex():
-            return NotImplemented
 
         if not isinstance(other, (RandomVariable, Complex)):
             return NotImplemented
 
+        if not is_known_subset(
+                self._node.value_set,
+                operation.valid_value_set,
+        ):
+            return NotImplemented
+
         if isinstance(other, RandomVariable):
-            if not other._is_real_or_complex():
+            if not is_known_subset(
+                    other._node.value_set,
+                    operation.valid_value_set,
+            ):
                 return NotImplemented
         else:
             other = RandomVariable._from_node(
                 ConstantNode(other)
             )
 
-        result_value_set = (
-            REALS
-            if is_known_subset(self._node.value_set, REALS)
-               and is_known_subset(other._node.value_set, REALS)
-            else COMPLEXES
-        )
-
-        inputs = (
+        left_node, right_node = (
             (other._node, self._node)
             if reverse
             else (self._node, other._node)
         )
 
+        value_set = operation.infer_value_set(
+            left_node.value_set,
+            right_node.value_set,
+        )
+
+        node_name = operation.name_func(left_node.name, right_node.name)
+
         return RandomVariable._from_node(
             OperationNode(
-                operation=operation,
-                inputs=inputs,
-                value_set=result_value_set,
+                operation=operation.operation,
+                inputs=(left_node, right_node),
+                name=node_name,
+                value_set=value_set,
+            )
+        )
+
+    def _unary_operation(
+            self,
+            operation: ArithmeticOperation,
+    ) -> RandomVariable:
+
+        if not is_known_subset(
+                self._node.value_set,
+                operation.valid_value_set,
+        ):
+            return NotImplemented
+
+        value_set = operation.infer_value_set(
+            self._node.value_set
+        )
+
+        node_name = operation.name_func(self._node.name)
+
+        return RandomVariable._from_node(
+            OperationNode(
+                operation=operation.operation,
+                inputs=(self._node,),
+                name=node_name,
+                value_set=value_set,
             )
         )
 
@@ -139,6 +178,7 @@ class RandomVariable:
             function: Callable,
             *others: RandomVariable,
             value_set: ValueSet,
+            function_name: str = "f",
             vectorized: bool = False,
     ) -> RandomVariable:
 
@@ -161,14 +201,16 @@ class RandomVariable:
                 for realization in zip(*values)
             ])
 
+        node_name = f"{function_name}({', '.join(map(str, inputs))})"
+
         return RandomVariable._from_node(
             OperationNode(
                 operation=operation,
                 inputs=inputs,
+                name=node_name,
                 value_set=value_set,
             )
         )
-
 
     def __add__(self, other):
         return self._binary_operation(other, ADD)
@@ -188,61 +230,31 @@ class RandomVariable:
     def __rmul__(self, other):
         return self._binary_operation(other, MULTIPLY)
 
-    def __truediv__(self, other, DIVIDE=None):
+    def __truediv__(self, other):
         return self._binary_operation(other, DIVIDE)
 
-    def __rtruediv__(self, other, DIVIDE=None):
+    def __rtruediv__(self, other):
         return self._binary_operation(other, DIVIDE, reverse=True)
 
     def __mod__(self, other: RandomVariable | Real) -> RandomVariable:
-
-        if not is_known_subset(self._node.value_set, REALS):
-            return NotImplemented
-
-        if not isinstance(other, (RandomVariable, Real)):
-            return NotImplemented
-
-        if isinstance(other, RandomVariable):
-            if not is_known_subset(other._node.value_set, REALS):
-                return NotImplemented
-        else:
-            other = RandomVariable._from_node(
-                ConstantNode(other)
-            )
-
-        return RandomVariable._from_node(
-            OperationNode(
-                operation=MODULO,
-                inputs=(self._node, other._node),
-                value_set=REALS,
-            )
-        )
+        return self._binary_operation(other, MODULO)
 
     def __rmod__(self, other: RandomVariable | Real) -> RandomVariable:
+        return self._binary_operation(other, MODULO, reverse=True)
 
-        if not is_known_subset(self._node.value_set, REALS):
-            return NotImplemented
+    def __pow__(self, other: RandomVariable | Complex) -> RandomVariable:
+        return self._binary_operation(other, POWER)
 
-        if not isinstance(other, (RandomVariable, Real)):
-            return NotImplemented
+    def __rpow__(self, other: RandomVariable | Complex) -> RandomVariable:
+        return self._binary_operation(other, POWER, reverse=True)
 
-        if isinstance(other, RandomVariable):
-            if not is_known_subset(other._node.value_set, REALS):
-                return NotImplemented
-        else:
-            other = RandomVariable._from_node(
-                ConstantNode(other)
-            )
+    def __neg__(self) -> RandomVariable:
+        return self._unary_operation(NEGATIVE)
 
-        return RandomVariable._from_node(
-            OperationNode(
-                operation=MODULO,
-                inputs=(other._node,self._node),
-                value_set=REALS,
-            )
-        )
+    def __abs__(self) -> RandomVariable:
+        return self._unary_operation(ABS)
 
-    def _inequality_comparison(self, operator: Callable, other: RandomVariable | Real) -> Event:
+    def _inequality_comparison(self, operator: ComparisonOperation, other: RandomVariable | Real) -> Event:
 
         if not is_known_subset(self._node.value_set, REALS):
             return NotImplemented
@@ -259,24 +271,30 @@ class RandomVariable:
         else:
             return NotImplemented
 
+        node_name = operator.name_func(self._node.name, other_node.name)
+
         return Event(
             OperationNode(
-                operation=operator,
+                operation=operator.operation,
                 inputs=(self._node, other_node),
+                name=node_name,
                 value_set=sp.FiniteSet(False, True),
             )
         )
 
-    def _equality_comparison(self, operator: Callable, other: RandomVariable | Real) -> Event:
+    def _equality_comparison(self, operator: ComparisonOperation, other: RandomVariable | Real) -> Event:
         if isinstance(other, RandomVariable):
             other_node = other._node
         else:
             other_node = ConstantNode(other)
 
+        node_name = operator.name_func(self._node.name, other_node.name)
+
         return Event(
             OperationNode(
-                operation=operator,
+                operation=operator.operation,
                 inputs=(self._node, other_node),
+                name=node_name,
                 value_set=sp.FiniteSet(False, True),
             )
         )

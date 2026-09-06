@@ -6,7 +6,7 @@ import scipy as sp
 
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.context import RealizationContext
-from src.problab.value_sets import ValueSet
+from src.problab.value_sets.sets import ValueSet
 
 class CategoricalDistribution(Distribution):
 
