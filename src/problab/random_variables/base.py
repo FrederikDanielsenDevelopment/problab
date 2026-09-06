@@ -3,6 +3,8 @@ from __future__ import annotations
 from itertools import count
 from numbers import Real, Complex
 from typing import Callable
+
+import networkx as nx
 import numpy as np
 import sympy as sp
 
@@ -12,23 +14,25 @@ from src.problab.events import Event
 from src.problab.operations import ADD, SUBTRACT, MULTIPLY, MODULO, LT, LTE, GT, GTE, EQ, NEQ, POWER, \
     ArithmeticOperation, NEGATIVE, ABS, DIVIDE, ComparisonOperation
 from src.problab.probability.intervals import ProbabilityInterval, ConfidenceInterval
+from src.problab.random_variables._config import DEF_MAX_GRAPH_SIZE
 from src.problab.random_variables.context import RealizationContext
+from src.problab.random_variables.graph import NodeGraph
 from src.problab.random_variables.nodes import DistributionNode, Node, ConstantNode, OperationNode
 from src.problab.statistics.quantiles import quantile_confidence_interval
 from src.problab.value_sets._utils import is_known_subset
 from src.problab.value_sets.base import ValueSet
-from src.problab.value_sets.inference import _infer_power_value_set
+
 from src.problab.value_sets.sets import COMPLEXES, REALS
 
 class RandomVariable:
 
     _count = count()
 
-    def __init__(
-            self,
-            distribution: Distribution,
-            name: str | None = None,
-    ) -> None:
+    def __init__(self,
+                 distribution: Distribution,
+                 name: str | None = None
+                 ) -> None:
+
         self._distribution = distribution
 
         if name is None: self._name = "RV_" + str(next(RandomVariable._count) + 1)
@@ -37,11 +41,11 @@ class RandomVariable:
         self._node = DistributionNode(distribution, rv_name=self._name)
 
     @classmethod
-    def _from_node(
-            cls,
-            node: Node,
-            name: str | None = None,
-    ) -> RandomVariable:
+    def _from_node(cls,
+                   node: Node,
+                   name: str | None = None
+                   ) -> RandomVariable:
+
         rv = cls.__new__(cls)
 
         rv._node = node
@@ -53,10 +57,17 @@ class RandomVariable:
     def name(self) -> str:
         return self._name
 
+    @property
+    def dependency_graph(self) -> NodeGraph:
+        return NodeGraph(self._node, max_size=DEF_MAX_GRAPH_SIZE)
+
+    def plot_dependencies(self, max_size=DEF_MAX_GRAPH_SIZE) -> None:
+        NodeGraph(self._node, max_size=max_size).plot()
+
     def realize(self):
         return self.sample()
 
-    def sample(self, num_samples: int = 1,  rng: np.random.Generator | None = None,) -> np.ndarray:
+    def sample(self, num_samples: int = 1,  rng: np.random.Generator | None = None) -> np.ndarray:
 
         if num_samples < 1:
             raise ValueError("Number of samples must be positive")
@@ -68,12 +79,11 @@ class RandomVariable:
     def _is_real_or_complex(self) -> bool:
         return is_known_subset(self._node.value_set, COMPLEXES)
 
-    def _binary_operation(
-            self,
-            other: RandomVariable | Complex,
-            operation: ArithmeticOperation,
-            reverse: bool = False,
-    ) -> RandomVariable:
+    def _binary_operation(self,
+                          other: RandomVariable | Complex,
+                          operation: ArithmeticOperation,
+                          reverse: bool = False
+                          ) -> RandomVariable:
 
         if not isinstance(other, (RandomVariable, Complex)):
             return NotImplemented
@@ -117,10 +127,9 @@ class RandomVariable:
             )
         )
 
-    def _unary_operation(
-            self,
-            operation: ArithmeticOperation,
-    ) -> RandomVariable:
+    def _unary_operation(self,
+                         operation: ArithmeticOperation
+                         ) -> RandomVariable:
 
         if not is_known_subset(
                 self._node.value_set,
@@ -173,14 +182,13 @@ class RandomVariable:
             is_estimate=True
         )
 
-    def apply(
-            self,
-            function: Callable,
-            *others: RandomVariable,
-            value_set: ValueSet,
-            function_name: str = "f",
-            vectorized: bool = False,
-    ) -> RandomVariable:
+    def apply(self,
+              function: Callable,
+              *others: RandomVariable,
+              value_set: ValueSet,
+              function_name: str = "f",
+              vectorized: bool = False
+              ) -> RandomVariable:
 
         if not callable(function):
             raise TypeError("'function' must be callable.")
@@ -320,7 +328,7 @@ class RandomVariable:
     def __repr__(self):
         return (
             f"RandomVariable("
-            f"name={self._name!r}, "
+            f"name={self._name}, "
             f"value_set={self._node.value_set!r}"
             f")"
         )

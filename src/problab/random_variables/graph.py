@@ -1,5 +1,6 @@
 from typing import Any
 import networkx as nx
+import matplotlib.pyplot as plt
 
 from src.problab.random_variables.nodes import Node
 
@@ -34,11 +35,30 @@ class NodeGraph:
     def nodes(self) -> set[Node[Any]]:
         return set(self._graph.nodes)
 
+    @property
+    def nx_graph(self) -> nx.DiGraph:
+        return self._graph
+
     def num_dependents(self, node: Node[Any]) -> int:
         return self._graph.in_degree(node)  # for one input node this always returns an int
 
     def num_dependencies(self, node: Node[Any]) -> int:
         return self._graph.out_degree(node)  # for one input node this always returns an int
+
+    def plot(self, use_extended_names: bool = False) -> None:
+
+        labels = {
+            node: node.extended_name if use_extended_names else node.name
+            for node in self.nodes
+        }
+
+        nx.draw(
+            self._graph,
+            with_labels=True,
+            labels=labels,
+        )
+
+        plt.show()
 
     def _build_graph(self) -> None:
         self._add_node_recursive(self._root_node)
@@ -59,5 +79,6 @@ class NodeGraph:
 
             if child_node in self._graph:
                 self._graph.add_edge(node, child_node)
+
 
 

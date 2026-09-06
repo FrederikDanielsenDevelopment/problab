@@ -55,18 +55,15 @@ NEGATIVE    = ArithmeticOperation(operation=operator.neg, name_func=lambda x: f"
 ABS         = ArithmeticOperation(operation=operator.abs, name_func=lambda x: f"abs({x})",              valid_value_set=COMPLEXES, infer_value_set=_infer_absolute_value_set)
 
 # Logical operations
-AND         = LogicalOperation(operation=operator.and_,   name_func=lambda a, b: f"({a} & {b})")
-OR          = LogicalOperation(operation=operator.or_,    name_func=lambda a, b: f"({a} | {b})")
-XOR         = LogicalOperation(operation=operator.xor,    name_func=lambda a, b: f"({a} ^ {b})")
-INVERT      = LogicalOperation(operation=operator.invert, name_func=lambda x: f"(~{x})")
+AND         = LogicalOperation(operation=operator.and_,   name_func=lambda a, b: f"{{{a} & {b}}}")
+OR          = LogicalOperation(operation=operator.or_,    name_func=lambda a, b: f"{{{a} | {b}}}")
+XOR         = LogicalOperation(operation=operator.xor,    name_func=lambda a, b: f"{{{a} ^ {b}}}")
+INVERT      = LogicalOperation(operation=operator.invert, name_func=lambda x: f"{{~{x}}}")
 
 # Comparisons
-LT          = ComparisonOperation(operation=operator.lt, name_func=lambda a, b: f"({a} < {b})")
-GT          = ComparisonOperation(operation=operator.gt, name_func=lambda a, b: f"({a} > {b})")
-LTE         = ComparisonOperation(operation=operator.le, name_func=lambda a, b: f"({a} <= {b})")
-GTE         = ComparisonOperation(operation=operator.ge, name_func=lambda a, b: f"({a} >= {b})")
-EQ          = ComparisonOperation(operation=operator.eq, name_func=lambda a, b: f"({a} = {b})")
-NEQ         = ComparisonOperation(operation=operator.ne, name_func=lambda a, b: f"({a} != {b})")
-
-
-
+LT          = ComparisonOperation(operation=operator.lt, name_func=lambda a, b: f"{{{a} < {b}}}")
+GT          = ComparisonOperation(operation=operator.gt, name_func=lambda a, b: f"{{{a} > {b}}}")
+LTE         = ComparisonOperation(operation=operator.le, name_func=lambda a, b: f"{{{a} <= {b}}}")
+GTE         = ComparisonOperation(operation=operator.ge, name_func=lambda a, b: f"{{{a} >= {b}}}")
+EQ          = ComparisonOperation(operation=operator.eq, name_func=lambda a, b: f"{{{a} = {b}}}")
+NEQ         = ComparisonOperation(operation=operator.ne, name_func=lambda a, b: f"{{{a} != {b}}}")

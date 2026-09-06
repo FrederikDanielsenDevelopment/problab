@@ -15,6 +15,12 @@ class Event:
     def name(self) -> str:
         return self._node.name
 
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return f"Event({self._node!r})"
+
     def __and__(self, other: Event) -> Event:
 
         if not isinstance(other, Event):
