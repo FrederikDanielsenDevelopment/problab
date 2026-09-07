@@ -5,10 +5,10 @@ from enum import Enum
 from collections.abc import Callable
 from numbers import Real
 
-from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA
+from src.problab.distributions._config import DEF_NUM_SAMPLES, DEF_ALPHA, DEF_DISTRIBUTION_SYMBOL_NAME
 from src.problab.probability.intervals import ConfidenceInterval
 from src.problab.random_variables.context import RealizationContext
-from src.problab.random_variables.nodes import Node, ConstantNode
+from src.problab.random_variables.nodes import Node, ConstantNode, DistributionNode
 from src.problab.statistics.quantiles import quantile_confidence_interval, QuantileMethod
 from src.problab.value_sets.base import ValueSet
 
@@ -23,36 +23,66 @@ class Mode(Enum):
 
 class Distribution(ABC):
 
+
     @property
     @abstractmethod
     def value_set(self) -> ValueSet:
         ...
 
-    @abstractmethod
     def sample(self, context: RealizationContext | None = None) -> np.ndarray:
+
+        if context is None:
+            root = DistributionNode(self, rv_name=self.name)
+            context = RealizationContext(root_node=root)
+            return context.evaluate(root)
+
+        parameter_values = tuple(context.evaluate(parameter) for parameter in self.parameters)
+
+        return self._sample(
+            *parameter_values,
+            num_samples=context.num_samples,
+            rng=context.rng,
+        )
+
+    @abstractmethod
+    def _sample(self,
+                *parameters: np.ndarray,
+                num_samples: int,
+                rng: np.random.Generator
+                ) -> np.ndarray:
         ...
+
+
+    def __init__(self,
+                 parameters: tuple[Node[Any], ...] | None = None,
+                 symbol: str = DEF_DISTRIBUTION_SYMBOL_NAME) -> None:
+        self._parameters = parameters or None
+        self._symbol = symbol
+
 
     @property
-    @abstractmethod
-    def name(self) -> str:
-        ...
+    def symbol(self) -> str:
+        return self._symbol
 
-    def __init__(self, parameters: tuple[Node[Any], ...] | None = None) -> None:
-        self._parameters = parameters or None
+
+    @property
+    def name(self) -> str:
+        return f"{self.symbol}({", ".join(parameter.name for parameter in self.parameters)})"
 
 
     @property
     def parameters(self) -> tuple[Node[Any], ...] | None:
         return self._parameters
 
+
     @property
-    def node_dependencies(self) -> set[Node[Any]] | None:
+    def node_dependencies(self) -> set[Node[Any]]:
         dependencies = set(
             x for x in self.parameters
             if not isinstance(x, ConstantNode)
         )
 
-        return dependencies or None
+        return dependencies
 
 
     def quantile_confidence_interval(self,
@@ -62,12 +92,13 @@ class Distribution(ABC):
                                      rng: np.random.Generator | None = None
                                      ) -> ConfidenceInterval:
 
-        samples = self.sample(
-            RealizationContext(
-                num_samples=num_samples,
-                rng=rng,
-            )
+        root_node = DistributionNode(self, rv_name=self.name)
+        context = RealizationContext(
+            root_node=root_node,
+            num_samples=num_samples,
+            rng=rng,
         )
+        samples = context.evaluate(root_node)
 
         return quantile_confidence_interval(
             samples=samples,
@@ -82,12 +113,13 @@ class Distribution(ABC):
                      rng: np.random.Generator | None = None
                      ) -> float | np.ndarray:
 
-        samples = self.sample(
-            RealizationContext(
-                num_samples=num_samples,
-                rng=rng,
-            )
+        root_node = DistributionNode(self, rv_name=self.name)
+        context = RealizationContext(
+            root_node=root_node,
+            num_samples=num_samples,
+            rng=rng,
         )
+        samples = context.evaluate(root_node)
 
         result = operation(samples)
 

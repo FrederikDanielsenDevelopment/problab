@@ -2,7 +2,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 
-from src.problab.random_variables._config import DEF_MAX_GRAPH_DEPTH, DEF_MAX_GRAPH_SIZE
+from src.problab.random_variables._config import DEF_MAX_GRAPH_SIZE
 from src.problab.random_variables.graph import NodeGraph
 from src.problab.random_variables.nodes import Node
 

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Callable, Any
 
 import numpy as np
 import sympy as sp
 
-from src.problab.distributions.base import Distribution
-from src.problab.random_variables.context import RealizationContext
 from src.problab.value_sets.base import ValueSet
 from src.problab.value_sets.sets import UNKNOWN_VALUE_SET
+
+if TYPE_CHECKING:
+    from src.problab.distributions.base import Distribution
+    from src.problab.random_variables.context import RealizationContext
+
 
 T = TypeVar('T')
 

@@ -30,19 +30,25 @@ def P(event: Event,
     if num_samples <= 0:
         raise ValueError("'num_samples' must be positive.")
 
-    context = RealizationContext(num_samples=num_samples, rng=rng)
-
-    event_values = context.evaluate(event._node)
-
     if given is None:
+        event_values = RealizationContext(root_node=event._node, num_samples=num_samples, rng=rng).evaluate(event._node)
+
         return ProbabilityResult(
             value=float(np.mean(event_values)),
             num_successes=int(np.sum(event_values)),
             num_unconditioned_samples=num_samples
         )
 
+    joint_event = event & given
+
+    context = RealizationContext(
+        root_node=joint_event._node,
+        num_samples=num_samples,
+        rng=rng,
+    )
+
     given_values = context.evaluate(given._node)
-    num_conditioned_samples  = int(np.sum(given_values))
+    num_conditioned_samples = int(np.count_nonzero(given_values))
 
     if num_conditioned_samples == 0:
         return ProbabilityResult(
@@ -52,11 +58,12 @@ def P(event: Event,
             num_conditioned_samples=0,
         )
 
-    conditioned_event_values = event_values[given_values]
+    joint_values = context.evaluate(joint_event._node)
+    num_successes = int(np.count_nonzero(joint_values))
 
     return ProbabilityResult(
-        value=float(np.mean(conditioned_event_values)),
-        num_successes=int(np.sum(conditioned_event_values)),
+        value=num_successes / num_conditioned_samples,
+        num_successes=num_successes,
         num_unconditioned_samples=num_samples,
         num_conditioned_samples=num_conditioned_samples,
     )

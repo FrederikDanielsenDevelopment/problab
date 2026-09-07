@@ -1,14 +1,16 @@
 from numbers import Real
 
 import numpy as np
-import scipy as sp
+import sympy as sp
 from scipy.stats import binom
 
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.base import RandomVariable
 from src.problab.random_variables.context import RealizationContext
 from src.problab.random_variables.nodes import ConstantNode
-from src.problab.value_sets.sets import ValueSet, NATURALS_0, is_known_subset, UNIT_INTERVAL
+from src.problab.value_sets._utils import is_known_subset
+from src.problab.value_sets.base import ValueSet
+from src.problab.value_sets.sets import NATURALS_0, UNIT_INTERVAL
 
 class BinomialDistribution(Distribution):
 
@@ -49,22 +51,23 @@ class BinomialDistribution(Distribution):
 
         self._p = p_node
 
-        super().__init__(parameters=(self._n, self._p))
+        super().__init__(parameters=(self._n, self._p), symbol="Bin")
 
     @property
     def value_set(self) -> ValueSet:
         return self._value_set
 
-    def sample(self, context: RealizationContext | None = None) -> np.ndarray:
-        if context is None:
-            context = RealizationContext()
+    def _sample(self,
+                *parameters: np.ndarray,
+                num_samples: int,
+                rng: np.random.Generator,
+                ) -> np.ndarray:
 
-        n = context.evaluate(self._n)
-        p = context.evaluate(self._p)
+        n, p = parameters
 
         return binom.rvs(
             n=n,
             p=p,
-            size=context.num_samples,
-            random_state=context.rng
+            size=num_samples,
+            random_state=rng
         )

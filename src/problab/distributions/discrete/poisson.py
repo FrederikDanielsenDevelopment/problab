@@ -35,14 +35,16 @@ class PoissonDistribution(Distribution):
     def value_set(self) -> ValueSet:
         return self._value_set
 
-    def sample(self, context: RealizationContext | None = None) -> np.ndarray:
-        if context is None:
-            context = RealizationContext()
+    def _sample(self,
+                *parameters: np.ndarray,
+                num_samples: int,
+                rng: np.random.Generator,
+                ) -> np.ndarray:
 
-        mu = context.evaluate(self._mu)
+        mu, = parameters
 
         return poisson.rvs(
             mu=mu,
-            size=context.num_samples,
-            random_state=context.rng
+            size=num_samples,
+            random_state=rng
         )

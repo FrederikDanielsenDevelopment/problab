@@ -2,11 +2,12 @@ from numbers import Real
 from typing import Iterable, Any
 
 import numpy as np
-import scipy as sp
+import sympy as sp
 
 from src.problab.distributions.base import Distribution
 from src.problab.random_variables.context import RealizationContext
-from src.problab.value_sets.sets import ValueSet
+from src.problab.value_sets.base import ValueSet
+
 
 class CategoricalDistribution(Distribution):
 
@@ -44,21 +45,19 @@ class CategoricalDistribution(Distribution):
     def value_set(self) -> ValueSet:
         return self._value_set
 
-    def sample(self, context: RealizationContext | None = None) -> np.ndarray:
-
-        if context is None:
-            num_samples = 1
-            rng = np.random.default_rng()
-        else:
-            num_samples = context.num_samples
-            rng = context.rng
+    def _sample(self,
+                *parameters: np.ndarray,
+                num_samples: int,
+                rng: np.random.Generator
+                ) -> np.ndarray:
 
         return np.array([
             self._categories[i]
             for i in rng.choice(
                 len(self._categories),
                 size=num_samples,
-                p=self._probabilities
-            )])
+                p=self._probabilities,
+            )
+        ])
 
 
