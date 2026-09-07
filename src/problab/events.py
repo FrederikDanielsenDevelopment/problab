@@ -59,3 +59,10 @@ class Event:
             name=node_name,
             value_set=sp.FiniteSet(False, True),
         ))
+
+    def __bool__(self) -> bool:
+        raise TypeError(
+            "An Event has no single truth value. "
+            "Combine events using '&', '|', and '~', "
+            "with parentheses around each comparison."
+        )

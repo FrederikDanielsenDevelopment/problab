@@ -117,7 +117,6 @@ def arccosh(x: RandomVariable | Real) -> RandomVariable | float:
     _require_domain(
         x=x,
         domain=sp.Interval(1, sp.oo),
-        message="'x' must contain only values in [1, infinity).",
     )
 
     return _apply(
@@ -131,7 +130,6 @@ def arctanh(x: RandomVariable | Real) -> RandomVariable | float:
     _require_domain(
         x=x,
         domain=sp.Interval.open(-1, 1),
-        message="'x' must contain only values in (-1, 1).",
     )
 
     return _apply(

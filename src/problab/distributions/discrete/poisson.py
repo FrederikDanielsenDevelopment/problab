@@ -7,7 +7,9 @@ from src.problab.distributions.base import Distribution
 from src.problab.random_variables.base import RandomVariable
 from src.problab.random_variables.context import RealizationContext
 from src.problab.random_variables.nodes import ConstantNode
-from src.problab.value_sets.sets import ValueSet, NATURALS_0, is_known_subset, NON_NEGATIVE_REALS
+from src.problab.value_sets._utils import is_known_subset
+from src.problab.value_sets.base import ValueSet
+from src.problab.value_sets.sets import NATURALS_0, NON_NEGATIVE_REALS
 
 class PoissonDistribution(Distribution):
 
@@ -29,7 +31,7 @@ class PoissonDistribution(Distribution):
         self._mu = mu_node
         self._value_set = NATURALS_0
 
-        super().__init__(parameters=self._mu)
+        super().__init__(parameters=(self._mu,))
 
     @property
     def value_set(self) -> ValueSet:

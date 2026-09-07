@@ -154,7 +154,7 @@ class RandomVariable:
 
     def interval(self,
                  alpha: float,
-                 num_samples: int | None = None,
+                 num_samples: int = DEF_NUM_SAMPLES,
                  rng: np.random.Generator | None = None
                  ) -> ProbabilityInterval:
 
@@ -181,6 +181,35 @@ class RandomVariable:
             alpha=alpha,
             is_estimate=True
         )
+
+    def is_in(self,
+              lower_bound: Real,
+              upper_bound: Real,
+              closed: str = "both"
+              ) -> Event:
+
+        if not is_known_subset(self._node.value_set, REALS):
+            raise TypeError("is_in() requires a real-valued random variable.")
+
+        if not isinstance(lower_bound, Real) or not isinstance(upper_bound, Real):
+            raise TypeError("Interval bounds must be real numbers.")
+
+        if not lower_bound <= upper_bound:
+            raise ValueError("Lower bound must be less than or equal to upper bound.")
+
+        if closed == "both":
+            return (lower_bound <= self) & (self <= upper_bound)
+
+        if closed == "left":
+            return (lower_bound <= self) & (self < upper_bound)
+
+        if closed == "right":
+            return (lower_bound < self) & (self <= upper_bound)
+
+        if closed == "none":
+            return (lower_bound < self) & (self < upper_bound)
+
+        raise ValueError("closed must be one of 'both', 'left', 'right', or 'none'.")
 
     def apply(self,
               function: Callable,
@@ -353,7 +382,4 @@ class RandomVariable:
             q=q,
             alpha=alpha,
         )
-
-
-
 

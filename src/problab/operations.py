@@ -44,6 +44,16 @@ def _MODULO(x, y):
 
     return np.where(y == 0, np.nan, result)
 
+def _POWER(x, y):
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    if np.issubdtype(x.dtype, np.integer) and np.any(y < 0):
+        x = x.astype(float)
+
+    return np.emath.power(x, y)
+
+
 # Arithmetic operations
 ADD         = ArithmeticOperation(operation=operator.add, name_func=lambda a, b: f"({a} + {b})",        valid_value_set=COMPLEXES, infer_value_set=_infer_add_value_set)
 SUBTRACT    = ArithmeticOperation(operation=operator.sub, name_func=lambda a, b: f"({a} - {b})",        valid_value_set=COMPLEXES, infer_value_set=_infer_subtract_value_set)

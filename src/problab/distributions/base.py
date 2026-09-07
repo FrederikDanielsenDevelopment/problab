@@ -55,8 +55,9 @@ class Distribution(ABC):
 
     def __init__(self,
                  parameters: tuple[Node[Any], ...] | None = None,
-                 symbol: str = DEF_DISTRIBUTION_SYMBOL_NAME) -> None:
-        self._parameters = parameters or None
+                 symbol: str = DEF_DISTRIBUTION_SYMBOL_NAME
+                 ) -> None:
+        self._parameters = parameters if parameters is not None else ()
         self._symbol = symbol
 
 
@@ -71,7 +72,7 @@ class Distribution(ABC):
 
 
     @property
-    def parameters(self) -> tuple[Node[Any], ...] | None:
+    def parameters(self) -> tuple[Node[Any], ...]:
         return self._parameters
 
 
@@ -184,7 +185,11 @@ class Distribution(ABC):
         if mode == Mode.MONTE_CARLO:
             return self._monte_carlo(operation=np.std, num_samples=num_samples, rng=rng)
 
-        exact_std = np.sqrt(self._variance_exact())
+        exact_variance = self._variance_exact()
+        exact_std = (
+            None if exact_variance is None
+            else float(np.sqrt(exact_variance))
+        )
 
         if mode == Mode.EXACT:
             if exact_std is None:
@@ -282,21 +287,21 @@ class Distribution(ABC):
 
         return exact_ppf if exact_ppf is not None else monte_carlo()
 
-    def _mean_exact(self) -> float:
-        raise NotImplementedError
+    def _mean_exact(self) -> float | None:
+       return None
 
-    def _variance_exact(self) -> float:
-        raise NotImplementedError
+    def _variance_exact(self) -> float | None:
+        return None
 
     def _cdf_exact(self,
                    x: Real | np.ndarray
-                   ) -> float | np.ndarray:
-        raise NotImplementedError
+                   ) -> float | np.ndarray | None:
+        return None
 
     def _ppf_exact(self,
                    q: Real | np.ndarray
-                   ) -> float | np.ndarray:
-        raise NotImplementedError
+                   ) -> float | np.ndarray | None:
+        return None
 
 
 class ContinuousDistribution(Distribution):
